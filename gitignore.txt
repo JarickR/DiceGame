@@ -29,3 +29,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+public/art/Tier1.png
+public/art/Tier2.png
+public/art/Boss.png
+public/art/Accessories.png

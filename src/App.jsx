@@ -1,330 +1,333 @@
-import React, { useMemo, useState } from 'react'
-import { mulberry32, d20 } from './rng.js'
-import SpriteArt from './SpriteArt.jsx'
-import ArtControls from './ArtControls.jsx'
-import FramePickerPanel from './ui/FramePickerPanel.jsx'
-import { useArtStore } from './useArtStore.js'
-import { useFrameMap } from './useFrameMap.js'
-import LootModal from './ui/LootModal.jsx'
-import LevelChoiceModal from './ui/LevelChoiceModal.jsx'
-import StatusIcons from './ui/StatusIcons.jsx'
-import UpgradeChooser from './ui/UpgradeChooser.jsx'
-import { attachEngine } from './rules/engine.js'
-import { defaultDie, classFaces } from './rules/dice.js'
-import { Traits, inferTraitsFromText, tickStatuses } from './traits.js'
+// src/App.jsx
+import React, { useEffect, useRef, useState } from "react";
+import GameEngine from "./engine";
 
-function Pill({label}){ return <span className="pill">{label}</span> }
+// Art & slicer
+import { SHEETS, ACCESSORY_BY_D20, ACCESSORY_INFO } from "./art/manifest.js";
+import { loadSheet, Portrait } from "./art/slicer.jsx";
+
+// Modals
+import UpgradeChooser from "./ui/UpgradeChooser.jsx";
+import LootModal from "./ui/LootModal.jsx";
+
+// ===== Error Boundary =====
+class ErrorBoundary extends React.Component {
+  constructor(p){ super(p); this.state = { error:null }; }
+  static getDerivedStateFromError(error){ return { error }; }
+  componentDidCatch(error, info){ console.error("ErrorBoundary:", error, info); }
+  render(){
+    if(this.state.error){
+      return (
+        <div style={{ padding:16, background:"#1a1f29", color:"#fff", fontFamily:"monospace" }}>
+          <h2>Runtime error</h2>
+          <pre>{String(this.state.error?.stack || this.state.error)}</pre>
+          <div>Check the browser console for details.</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App(){
-  const art = useArtStore()
-  const frames = useFrameMap()
-  const [seed,setSeed] = useState(1337)
-  const rand = useMemo(()=>mulberry32(seed),[seed])
+  const [engine, setEngine] = useState(null);
+  const engineRef = useRef(null);
 
-  // --- Engine wiring ---
-  const [upgradeChoice,setUpgradeChoice] = useState(null)
-  const [log,setLog] = useState([])
-  function push(msg){ setLog(l=>[...l, msg]) }
-  const [party,setParty] = useState([
-    {id:1,name:'Tank',hp:20,maxHp:20,armor:0,acc:[],bonusAttack:0,bonusSpells:0,flags:{}},
-    {id:2,name:'Healer',hp:20,maxHp:20,armor:0,acc:[],bonusAttack:0,bonusSpells:0,flags:{}},
-    {id:3,name:'DPS',hp:20,maxHp:20,armor:0,acc:[],bonusAttack:0,bonusSpells:0,flags:{}},
-  ])
-  const [enemies,setEnemies] = useState(null)
-  const [roomOutcome,setRoomOutcome] = useState(null)
-  const [ambush,setAmbush] = useState(false)
-  const [sigils,setSigils] = useState(0)
-  const [finalReady,setFinalReady] = useState(false)
+  // Art sheets
+  const [art, setArt] = useState({ tier1:null, tier2:null, boss:null, items:null });
 
-  const [loot,setLoot] = useState(null)
-  const [lootOpen,setLootOpen] = useState(false)
-  const [levelModal,setLevelModal] = useState(false)
+  // Game state mirrors
+  const [party, setParty] = useState([]);
+  const [enemies, setEnemies] = useState([]);
+  const [log, setLog] = useState([]);
+  const [upgradeChoice, setUpgradeChoice] = useState(null);
 
-  const app = { push, rand, get party(){return party}, setParty, get enemies(){return enemies}, setEnemies, log:push }
-  attachEngine(app)
+  // Loot modal state
+  const [lootOffer, setLootOffer] = useState(null);
 
-  const data = {
-    accessories: Array.from({length:20}).map((_,i)=>({ id:i+1, name:`Accessory ${i+1}`, text:`Effect of accessory ${i+1}.`})),
-    bosses: Array.from({length:20}).map((_,i)=>({ id:i+1, name:`Boss ${i+1}`, hp:24, armor:2, tier:3, trait:'Reflect 1. Untargetable unless last.' }))
-  }
+  // ---------- Boot engine ----------
+  useEffect(() => {
+    const e = new GameEngine();
+    e.init();
+    e.push = (msg) => setLog((prev)=>[msg, ...prev].slice(0,200));
+    // UI bridge: when enemy dies and tier==2, engine calls this to build an offer
+    e._triggerLootOffer = (hero, d20) => {
+      const idx = ACCESSORY_BY_D20[d20] ?? 0;
+      setLootOffer({ heroId: hero.id, heroName: hero.name, d20, itemIndex: idx });
+    };
+    engineRef.current = e;
+    setEngine(e);
+  }, []);
 
-  function rollRoom(){
-    const r = d20(rand)
-    setRoomOutcome({roll:r, type: r<=12? (r<=6?'T1':'T2') : 'Event'})
-    push(`Room roll d20=${r} → ${r<=12? (r<=6?'Tier 1':'Tier 2'):'Event'}`)
-  }
-  function rollEncounter(){
-    if(!roomOutcome){ push('Roll room first.'); return; }
-    if(roomOutcome.type==='Event'){ push('Event triggered (not implemented in demo).'); return; }
-    const tier = roomOutcome.type==='T1'?1:2
-    const cap = tier===1? (art.tier1Grid.cols*art.tier1Grid.rows) : (art.tier2Grid.cols*art.tier2Grid.rows)
-    const id = (d20(rand)-1) % cap + 1
-    const base = { id, name:`Enemy ${id}`, hp: tier===1?10:14, armor: tier===1?1:2, tier, trait: tier===1? 'Thick Hide. Unstable (on death deal 1).' : 'Corrosive: removes 1 armor. Chill Aura: no reroll 1 turn.' }
-    setEnemies([{...base, traitKeys: inferTraitsFromText(base), flags:{}}])
-    push(`Encounter: ${tier===1?'Tier 1':'Tier 2'} → Enemy ${id}`)
-  }
+  // Keep engine enemies in sync
+  useEffect(() => {
+    if (!engineRef.current) return;
+    engineRef.current._enemies = enemies;
+  }, [enemies]);
 
-  function startCombat(){
-    if(!roomOutcome || !enemies){ push('Need a room + encounter first.'); return; }
-    setEnemies(es=> es.map(e=> ({...e, traitKeys: inferTraitsFromText(e), flags:{} })))
-    push(`Combat started vs ${enemies.map(e=>e.name).join(', ')}${ambush?' (Ambush: enemies act first)':''}.`)
-    onRoundStart()
-  }
+  // ---------- Load art sheets once ----------
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [tier1, tier2, boss, items] = await Promise.all([
+        loadSheet(SHEETS.tier1),
+        loadSheet(SHEETS.tier2),
+        loadSheet(SHEETS.boss),
+        loadSheet(SHEETS.items),
+      ]);
+      if (!alive) return;
+      setArt({ tier1, tier2, boss, items });
+    })();
+    return () => { alive = false; };
+  }, []);
 
-  function makeCtx(){
-    return {
-      log:(m)=>push(m),
-      enemies: enemies||[],
-      party,
+  // ---------- Seed demo hero/enemy ----------
+  useEffect(() => {
+    const app = engineRef.current; if (!app) return;
+    if (party.length === 0) {
+      const hero = app.buildHero?.("Hero", "king");
+      app.party = [hero];
+      setParty([hero]);
     }
-  }
-
-  function onRoundStart(){
-    setEnemies(es=> es?.map(e=>{
-      if(!e) return e
-      const ctx = makeCtx()
-      e.traitKeys?.forEach(k => Traits[k]?.onRoundStart?.(e, ctx))
-      return e
-    }))
-    push('Round start.')
-  }
-
-  function onRoundEnd(){
-    setParty(p => p.map(h => { const copy = {...h}; tickStatuses(copy, {log: (m)=>push(m)}); return copy }))
-    setEnemies(es => es?.map(e => { const copy = {...e}; tickStatuses(copy, {log: (m)=>push(m)}); return copy }))
-    push('End of round effects resolved.')
-  }
-
-  function partyAttack(){
-    if(!enemies) return;
-    const target = enemies[0]
-    if(!target) return
-    if(target?.flags?.untargetableUnlessLast && enemies.filter(e=>e.hp>0).length>1){ push(`${target.name} is untargetable while allies live.`); return; }
-    let raw = 4 + (party[0]?.bonusAttack||0)
-    let mitigated = Math.max(0, raw - (target.armor||0))
-    const next = {...target, hp: target.hp - mitigated}
-    setEnemies([next])
-    push(`Party hits ${target.name} for ${mitigated} (raw ${raw}${target.armor?`, -${target.armor} armor`:''}). HP now ${Math.max(next.hp,0)}`)
-  }
-
-  function enemyAttack(){
-    if(!enemies) return;
-    const e = enemies[0]; if(e.hp<=0){ push(`${e.name} is defeated.`); return; }
-    const idx = Math.floor(rand()*party.length)
-    const h = party[idx]
-    let raw = e.tier===1?2:4
-    let mitigated = Math.max(0, raw - (h.armor||0))
-    const nextHp = (h.hp - mitigated)
-    setParty(p=>p.map((x,i)=>i===idx?{...x,hp:nextHp}:x))
-    push(`${e.name} hits ${h.name} for ${mitigated} (raw ${raw}${h.armor?`, -${h.armor} armor`:''}). ${h.name} HP now ${Math.max(nextHp,0)}`)
-    onRoundEnd()
-  }
-
-  function cleanup(){
-    if(!enemies) return
-    const e = enemies[0]
-    if(e.hp<=0){
-      push(`${e.name} defeated.`)
-      if(e.tier===1) onTier1Victory()
-      if(e.tier===2) onTier2Victory()
-      if(e.tier===3) onBossVictory()
-    }else{
-      push(`Enemy still has ${e.hp} HP.`)
+    if (enemies.length === 0) {
+      setEnemies([{ id: 1, name: "T1 Enemy", hp: 12, armor: 1, tier: 1 }]);
     }
-  }
+  }, [party.length, enemies.length]);
 
-  function openLootFromRoll(category){
-    const roll = d20(rand)
-    const acc = { id: roll, name: `Accessory ${roll}`, text: `Effect of accessory ${roll}.` }
-    setLoot(acc); setLootOpen(true)
-    push(`${category} loot roll d20=${roll}: ${acc.id}. ${acc.name}`)
-  }
-  function takeLoot(playerIndex=0){
-    if(!loot){ setLootOpen(false); return; }
-    setParty(p=>p.map((h,i)=>{
-      if(i!==playerIndex) return h
-      const has = h.acc || []
-      if(has.length>=2) return h
-      if(has.find(a=>a.id===loot.id)) return h
-      return { ...h, acc:[...has, loot] }
-    }))
-    setLootOpen(false)
-    push(`Equipped ${loot.name} to ${party[playerIndex].name}.`)
-  }
-  function skipLoot(){ setLootOpen(false); push('Loot declined.') }
+  // Helpers
+  const refreshFromEngine = () => {
+    const app = engineRef.current;
+    setParty([...(app?.party || [])]);
+    setEnemies([...(app?._enemies || [])]);
+    setUpgradeChoice(app?._upgradeChoice || null);
+  };
 
-  function onTier1Victory(){ setLevelModal(true) }
-  function onChooseLevel(playerId, choice){
-    if(choice==='level'){
-      setParty(p=>p.map(h=> h.id===playerId ? { ...h, bonusAttack:(h.bonusAttack||0)+1, bonusSpells:(h.bonusSpells||0)+1, hp:h.maxHp } : h))
-      push(`Level up: +1 attack & +1 spells for player ${playerId}; spells reset.`)
-    }else{
-      push(`Kept upgrades for player ${playerId}.`)
+  // ---------- UI actions ----------
+  const startEncounter = () => {
+    const app = engineRef.current; if (!app) return;
+    app.startEncounter?.();
+    refreshFromEngine();
+  };
+
+  const doTurn = () => {
+    const app = engineRef.current; if (!app || party.length === 0) return;
+    const hero = party[0];
+    const face = app.rollFace?.(hero);
+    if (face) {
+      app.push?.(`Rolled: ${face.name} (T${face.tier || 0})`);
+      app.resolveFace?.(hero, face);
+      app.endHeroTurn?.(hero);
     }
-  }
-  function onTier2Victory(){ openLootFromRoll('Tier 2') }
-  function onBossVictory(){
-    openLootFromRoll('Boss')
-    setSigils(s=>{
-      const n = s+1
-      if(n>=3){ setFinalReady(true); push('The Sigil is complete — Final Boss unlocked!'); }
-      return n
-    })
-  }
-  function startFinalBoss(){
-    setParty(p=>p.map(h=>({...h, hp:h.maxHp})))
-    const r = d20(rand)
-    const base = { id:r, name:`Boss ${r}`, hp:24, armor:2, tier:3, trait:'Reflect 1. Untargetable unless last.' }
-    const fb = { ...base, name: base.name + ' (Final Boss)', hp: Math.round(base.hp*1.5), traitKeys: inferTraitsFromText(base), flags:{} }
-    setEnemies([fb]); setFinalReady(false)
-    push(`Final Boss revealed: ${base.name} (+50% HP).`)
-    onRoundStart()
-  }
+    refreshFromEngine();
+  };
+
+  const addEnemy = (tier = 1) => {
+    const app = engineRef.current; if (!app) return;
+    const nextId = ((enemies.length % 20) + 1);
+    app.spawnEnemy?.({
+      id: nextId,
+      name: `T${tier} Enemy #${enemies.length + 1}`,
+      hp: 12 + tier * 4,
+      armor: Math.max(0, tier - 1),
+      tier,
+    });
+    app.push?.(`Spawned Tier ${tier} enemy.`);
+    refreshFromEngine();
+  };
+
+  const clearEnemies = () => {
+    engineRef.current?.clearEnemies?.();
+    engineRef.current?.push?.("Cleared all enemies.");
+    refreshFromEngine();
+  };
+
+  // Demo helper: simulate a Tier-2 drop immediately (for testing UI)
+  const testLoot = () => {
+    const app = engineRef.current; if (!app || party.length===0) return;
+    const hero = party[0];
+    const d20 = app.rollD20?.() || 1;
+    const idx = ACCESSORY_BY_D20[d20] ?? 0;
+    setLootOffer({ heroId: hero.id, heroName: hero.name, d20, itemIndex: idx });
+    app.push?.(`(Test) Loot offer created for ${hero.name} (d20=${d20}).`);
+  };
+
+  // ---------- Portrait helpers ----------
+  const EnemyPortrait = ({ e, size=120 }) => {
+    if (!e) return null;
+    const idx = ((e.id || 1) - 1); // slicer wraps internally
+    if (e.tier === 1 && art.tier1) return <Portrait sheet={art.tier1} index={idx} size={size} />;
+    if (e.tier === 2 && art.tier2) return <Portrait sheet={art.tier2} index={idx} size={size} />;
+    if (e.tier >= 3 && art.boss)  return <Portrait sheet={art.boss}  index={idx} size={size} />;
+    return <div style={{ width:size, height:size, outline:"1px dashed #444", background:"rgba(255,255,255,.03)" }} />;
+  };
+
+  const ItemPortrait = ({ index, size=64, title }) => {
+    if (!art.items) return <div style={{ width:size, height:size, outline:"1px dashed #444" }} title={title}/>;
+    return (
+      <div title={title} style={{ display:'inline-block', lineHeight:0 }}>
+        <Portrait sheet={art.items} index={index} size={size} />
+      </div>
+    );
+  };
+
+  // ---------- Loot modal handlers ----------
+  const acceptLoot = () => {
+    const app = engineRef.current; if (!app || !lootOffer) return;
+    app._lootOffer = { heroId: lootOffer.heroId, d20: lootOffer.d20, itemIndex: lootOffer.itemIndex };
+    app.commitAccessory?.(true);
+    setLootOffer(null);
+    refreshFromEngine();
+  };
+
+  const skipLoot = () => {
+    const app = engineRef.current; if (!app || !lootOffer) return;
+    app._lootOffer = { heroId: lootOffer.heroId, d20: lootOffer.d20, itemIndex: lootOffer.itemIndex };
+    app.commitAccessory?.(false);
+    setLootOffer(null);
+    refreshFromEngine();
+  };
+
+  // Tooltip helper for items
+  const itemTitle = (idx) => {
+    const info = ACCESSORY_INFO[idx] || {};
+    if (!info.name) return `Item #${(idx ?? 0)+1}`;
+    return `${info.name}\n${info.desc || ''}`.trim();
+  };
 
   return (
-    <>
-      <div className="container">
-        <h1>Dice Arena — React</h1>
-        <div className="small muted">Prototype with art, traits, loot, level-up, sigils, and final boss.</div>
+    <ErrorBoundary>
+      <div style={{ minHeight: "100vh", background: "#0e1116", color: "#e8ecf1", fontFamily: "system-ui, Segoe UI, Roboto, Arial, sans-serif" }}>
+        <div style={{ maxWidth: 1140, margin: "0 auto", padding: 16 }}>
+          <h1 style={{ margin: "6px 0 12px 0" }}>Dice Arena — Accessories, Passives & Encounter Start</h1>
 
-        <div className="grid" style={{marginTop:12}}>
-          {/* LEFT COLUMN */}
-          <div>
-            <ArtControls art={art} />
-            <FramePickerPanel art={art} frames={frames} />
-
-            <div className="card">
-              <h2>Party</h2>
-              {party.map((h,idx)=>(
-                <div key={h.id} className="card" style={{marginTop:8}}>
-                  <div className="row" style={{justifyContent:'space-between'}}>
-                    <div className="bold">{h.name}</div>
-                    <div className="small">
-                      <Pill label={`HP ${h.hp}/${h.maxHp}`}/> <Pill label={`Armor ${h.armor}`}/>
-                    </div>
-                  </div>
-
-                  <div className="row" style={{gap:8, marginTop:6}}>
-                    <label className="small muted">Class</label>
-                    <select value={h.classId||''} onChange={(e)=>{
-                      const id = e.target.value
-                      setParty(p=>p.map((x,i)=> i===idx ? { ...x, classId:id, die:[...(x.die?.filter(f=>!f.classId) || []), ...classFaces(id)] } : x))
-                    }} style={{ background:'#0f141b', border:'1px solid #28384a', color:'#e7edf5', borderRadius:6, padding:'4px 6px' }}>
-                      <option value="">(none)</option>
-                      <option value="thief">Thief</option>
-                      <option value="judge">Judge</option>
-                      <option value="tank">Tank</option>
-                      <option value="vampire">Vampire</option>
-                      <option value="king">King</option>
-                      <option value="lich">Lich</option>
-                      <option value="paladin">Paladin</option>
-                      <option value="barbarian">Barbarian</option>
-                    </select>
-
-                    <button className="btn" onClick={()=>{
-                      const hero = party[idx]
-                      if(!hero.die) hero.die = defaultDie()
-                      const face = app.rollFace(hero)
-                      app.resolveFace(hero, face)
-                      app.endHeroTurn(hero)
-                      setParty(p=>[...p]) // refresh
-                      setUpgradeChoice(app._upgradeChoice || null)
-                    }}>Roll Face</button>
-
-                    <div className="small muted">{party[idx]?._lastFace ? `Last: ${party[idx]._lastFace.name} (T${party[idx]._lastFace.tier||0})` : '—'}</div>
-                  </div>
-
-                  <StatusIcons flags={h.flags} compact />
-                </div>
-              ))}
-            </div>
+          {/* Controls */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            <button onClick={startEncounter} className="btn">Start Encounter</button>
+            <button onClick={doTurn} className="btn">Roll & Resolve</button>
+            <button onClick={() => addEnemy(1)} className="btn secondary">+ Tier 1</button>
+            <button onClick={() => addEnemy(2)} className="btn secondary">+ Tier 2</button>
+            <button onClick={() => addEnemy(3)} className="btn secondary">+ Boss</button>
+            <button onClick={clearEnemies} className="btn" style={{ marginLeft: "auto" }}>Clear Enemies</button>
+            <button onClick={testLoot} className="btn tertiary">Test Tier-2 Loot</button>
           </div>
 
-          {/* RIGHT COLUMN */}
-          <div>
-            <div className="card">
-              <h2>Exploration</h2>
-              <div className="bar">
-                <button className="btn" onClick={rollRoom}>Roll Room (d20)</button>
-                <button className="btn" onClick={rollEncounter}>Roll Encounter</button>
-                <button className="btn" onClick={startCombat}>Start Combat</button>
-                <div className="pill">Room: {roomOutcome ? `${roomOutcome.type} (d20=${roomOutcome.roll})` : '—'}</div>
-              </div>
-            </div>
+          {/* Party (with inventory) */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 12, marginBottom: 12 }}>
+            {party.map((h) => (
+              <div key={h.id} style={{ background: "#12151a", border: "1px solid #242a34", borderRadius: 12, padding: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>{h.name} <span style={{ opacity: .6 }}>(class: {h.classId})</span></div>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ width: 100, height: 100, outline: "1px dashed #333", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ fontSize: 12, opacity: .6 }}>Hero Art</div>
+                  </div>
+                  <div style={{ fontSize: 14, lineHeight: 1.5, flex: 1 }}>
+                    <div>HP: <b>{h.hp}</b> / {h.maxHp}</div>
+                    <div>Armor: <b>{h.armor || 0}</b></div>
+                    <div>Last Face: <b>{h._lastFace?.name || "—"}</b></div>
 
-            <div className="card">
-              <h2>Encounter</h2>
-              {!enemies && <div className="small muted">No enemies yet.</div>}
-              {enemies && enemies.map((e, i)=>(
-                <div key={i} className="card" style={{marginTop:8}}>
-                  <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
-                    <div className="bold">{e.name}</div>
-                    <div className="small">
-                      <Pill label={`HP ${e.hp}`}/> <Pill label={`Armor ${e.armor}`}/>
+                    {/* Inventory */}
+                    <div style={{ marginTop: 8 }}>
+                      <div className="small" style={{ opacity: .8, marginBottom: 4 }}>Accessories (max 2):</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {(h.inventory || []).map((idx, i) => (
+                          <ItemPortrait
+                            key={i}
+                            index={idx ?? 0}
+                            size={48}
+                            title={itemTitle(idx ?? 0)}
+                          />
+                        ))}
+                        {/* Empty slots visual */}
+                        {Array.from({length: Math.max(0, 2 - (h.inventory?.length || 0))}).map((_, i) => (
+                          <div key={`empty-${i}`} style={{ width:48, height:48, outline:"1px dashed #444", background:"rgba(255,255,255,.03)" }}/>
+                        ))}
+                      </div>
                     </div>
                   </div>
-
-                  <div className="small"><span className="bold">Trait:</span> {e.trait}</div>
-                  <StatusIcons flags={e.flags}/>
-
-                  <div style={{marginTop:8, display:'flex', gap:12, alignItems:'center'}}>
-                    {e.tier===1 && <SpriteArt img={art.tier1Img} cols={art.tier1Grid.cols} rows={art.tier1Grid.rows} index={frames.getFrame(1, e.id)} width={120} height={180} border={true}/>} 
-                    {e.tier===2 && <SpriteArt img={art.tier2Img} cols={art.tier2Grid.cols} rows={art.tier2Grid.rows} index={frames.getFrame(2, e.id)} width={120} height={180} border={true}/>} 
-                    {e.tier===3 && <SpriteArt img={art.bossImg} cols={art.bossGrid.cols} rows={art.bossGrid.rows} index={frames.getFrame(3, e.id)} width={120} height={180} border={true}/>} 
-                  </div>
-
-                  <div className="bar" style={{marginTop:8}}>
-                    <button className="btn secondary" onClick={enemyAttack}>Enemy Attack</button>
-                    <button className="btn" onClick={cleanup}>Cleanup (if defeated)</button>
-                    <button className="btn" onClick={()=>setAmbush(a=>!a)}>{ambush?'Ambush: ON':'Ambush: OFF'}</button>
-                    <button className="btn" onClick={onRoundStart}>[Round Start]</button>
-                    <button className="btn secondary" onClick={onRoundEnd}>[End Round]</button>
-                    <button className="btn" onClick={partyAttack}>Party Attack</button>
-                  </div>
                 </div>
-              ))}
-            </div>
-
-            <div className="card">
-              <h2>Sigil Progress</h2>
-              <div className="bar">
-                <div className="pill">Pieces: {sigils}/3</div>
-                {finalReady && <button className="btn" onClick={startFinalBoss}>Enter Final Boss</button>}
               </div>
-            </div>
+            ))}
+          </div>
 
-            <div className="card">
-              <h2>Art Preview</h2>
-              <div className="bar">
-                <SpriteArt img={art.tier1Img} cols={art.tier1Grid.cols} rows={art.tier1Grid.rows} index={1} width={80} height={120} border={true}/>
-                <SpriteArt img={art.tier2Img} cols={art.tier2Grid.cols} rows={art.tier2Grid.rows} index={1} width={80} height={120} border={true}/>
-                <SpriteArt img={art.bossImg} cols={art.bossGrid.cols} rows={art.bossGrid.rows} index={1} width={80} height={120} border={true}/>
-                <SpriteArt img={art.accImg} cols={art.accGrid.cols} rows={art.accGrid.rows} index={1} width={80} height={120} border={true}/>
+          {/* Enemies */}
+          <h3 style={{ margin: "16px 0 8px 0" }}>Enemies</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 12 }}>
+            {enemies.map((e, i) => (
+              <div key={i} style={{ background: "#12151a", border: "1px solid #242a34", borderRadius: 12, padding: 12, display: "flex", gap: 12, alignItems: "center" }}>
+                <EnemyPortrait e={e} size={120} />
+                <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 700 }}>{e.name}</div>
+                  <div>Tier: <b>{e.tier}</b></div>
+                  <div>HP: <b>{e.hp}</b></div>
+                  <div>Armor: <b>{e.armor || 0}</b></div>
+                  {/* Simple damage button to test defeat → loot */}
+                  {e.tier === 2 && (
+                    <button
+                      style={{ marginTop: 8 }}
+                      className="btn tertiary"
+                      onClick={() => {
+                        const app = engineRef.current;
+                        app.applyDamage?.(party[0], e, 999, { type: 'attack' });
+                        refreshFromEngine();
+                      }}
+                    >
+                      Defeat (test drop)
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            ))}
+            {enemies.length === 0 && <div style={{ opacity: .6 }}>No enemies yet…</div>}
+          </div>
 
-            <div className="card">
-              <h2>Log</h2>
-              <div className="small muted">{log.length===0 && 'No messages yet.'}</div>
-              <ul className="small" style={{marginTop:8}}>
-                {log.map((m,i)=>(<li key={i}>{m}</li>))}
-              </ul>
+          {/* Log */}
+          <h3 style={{ margin: "16px 0 8px 0" }}>Log</h3>
+          <div style={{ background: "#0b0e13", border: "1px solid #242a34", borderRadius: 12, padding: 12, minHeight: 120 }}>
+            {log.length === 0 && <div style={{ opacity: .5 }}>No actions yet… click “Start Encounter”, then “Roll & Resolve”.</div>}
+            <div style={{ display: "grid", gap: 6 }}>
+              {log.map((line, idx) => <div key={idx} style={{ opacity: .9 }}>{line}</div>)}
             </div>
           </div>
         </div>
+
+        {/* Upgrade modal */}
+        <UpgradeChooser
+          choice={upgradeChoice}
+          onKeepNew={() => { engineRef.current?.commitUpgrade?.(true);  refreshFromEngine(); }}
+          onKeepOld={() => { engineRef.current?.commitUpgrade?.(false); refreshFromEngine(); }}
+          renderSprite={(info) => {
+            if (!info) return null;
+            const { tier, index } = info;
+            if (tier === 1 && art.tier1) return <Portrait sheet={art.tier1} index={index} size={96} />;
+            if (tier === 2 && art.tier2) return <Portrait sheet={art.tier2} index={index} size={96} />;
+            if (tier >= 3 && art.boss)  return <Portrait sheet={art.boss}  index={index} size={96} />;
+            return null;
+          }}
+        />
+
+        {/* Loot modal */}
+        <LootModal
+          offer={lootOffer}
+          onAccept={acceptLoot}
+          onSkip={skipLoot}
+          renderItem={(idx) => {
+            const info = ACCESSORY_INFO[idx] || {};
+            return (
+              <div style={{ textAlign:'center' }}>
+                <Portrait sheet={art.items} index={idx ?? 0} size={96} />
+                <div className="small" style={{ marginTop: 6, opacity:.85 }}>
+                  <div style={{ fontWeight:600 }}>{info.name || `Item #${(idx ?? 0)+1}`}</div>
+                  <div>{info.desc || ''}</div>
+                </div>
+              </div>
+            );
+          }}
+        />
+
+        <footer style={{ textAlign: "center", padding: "12px 0", opacity: .6 }}>
+          Dice Arena — Tooltips enabled. Use “Start Encounter” to apply passives (armor, Concentration, etc.).
+        </footer>
       </div>
-
-      <footer className="small muted" style={{textAlign:'center', padding:'10px 0'}}>
-        Dice Arena © You — React prototype. Default sheets loaded from <code>/public/art</code>.
-      </footer>
-
-      <LootModal open={lootOpen} accessory={loot} onTake={()=>takeLoot(0)} onSkip={skipLoot} art={art.accImg} grid={art.accGrid} />
-      <LevelChoiceModal open={levelModal} party={party} onChoose={onChooseLevel} />
-      <UpgradeChooser
-        choice={upgradeChoice || app._upgradeChoice}
-        onKeepNew={()=>{ app.commitUpgrade(true); setUpgradeChoice(null); setParty(p=>[...p]) }}
-        onKeepOld={()=>{ app.commitUpgrade(false); setUpgradeChoice(null); setParty(p=>[...p]) }}
-      />
-    </>
-  )
+    </ErrorBoundary>
+  );
 }

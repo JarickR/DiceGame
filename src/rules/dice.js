@@ -1,4 +1,5 @@
-﻿import { SpellType } from './spells.js';
+﻿// src/rules/dice.js
+import { SpellType } from './spells.js';
 
 export function defaultDie(){
   return [
@@ -37,7 +38,7 @@ export function randomFaceByTier(tier){
 }
 
 export function rollFace(rand, hero){
-  const i = Math.floor(rand() * hero.die.length);
+  const i = Math.floor((rand || Math.random)() * hero.die.length);
   const face = hero.die[i];
   hero._lastFace = face;
   return face;
