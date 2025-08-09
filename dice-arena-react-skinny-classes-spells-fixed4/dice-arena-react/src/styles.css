@@ -1,0 +1,37 @@
+*{box-sizing:border-box}
+:root{--bg:#0a0d12;--card:#0f141b;--ink:#e7edf5;--muted:#a9b4c3;--line:#223043;--accent:#5ab0ff}
+html,body,#root{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+h1,h2,h3{margin:0 0 10px}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+.grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.small{font-size:12px}.muted{color:var(--muted)}
+.bold{font-weight:700}
+.btn{background:#1b2836;color:#fff;border:1px solid #2b3a4a;border-radius:8px;padding:8px 12px;cursor:pointer}
+.btn.secondary{background:#10161d}
+.pill{display:inline-flex;background:#16202a;border:1px solid #2b3a4a;border-radius:999px;padding:2px 8px;font-size:12px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+hr{border:0;border-top:1px solid #1f2a35;margin:14px 0}
+
+/* High-contrast status badges */
+.status { position: relative; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:6px; background:#0b0d10; border:1px solid #333; }
+.status .status-count { position:absolute; right:-6px; bottom:-6px; background:#111; color:#fff; border:1px solid #444; font-size:10px; line-height:1; padding:2px 4px; border-radius:6px; }
+.status.fx-bleed { box-shadow: 0 0 0 0 rgba(255,60,60,0.85); animation: pulse-red 1.2s infinite; color:#ff3c3c; border-color:#ff3c3c; }
+.status.fx-noReroll { color:#ffd166; border-color:#ffd166; }
+.status.fx-firstReduce { color:#89a7ff; border-color:#89a7ff; animation: shield-glow 1.6s ease-in-out infinite; }
+.status.fx-untargetableUnlessLast { color:#e2e2e2; border-color:#e2e2e2; opacity:0.95; }
+.status.fx-reflect1 { color:#5ab0ff; border-color:#5ab0ff; }
+.status.fx-healBlock { color:#89eaa0; border-color:#89eaa0; filter: none; }
+.status.fx-armorShred { color:#ffb06a; border-color:#ffb06a; }
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(255,60,60,0.7); }
+  70% { box-shadow: 0 0 0 12px rgba(255,60,60,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,60,60,0); }
+}
+@keyframes shield-glow {
+  0%,100% { box-shadow: 0 0 12px rgba(137,167,255,.35); }
+  50% { box-shadow: 0 0 18px rgba(137,167,255,.6); }
+}
