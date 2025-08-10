@@ -1,0 +1,206 @@
+/* src/ui/DiceRoll.css */
+
+:root{
+  /* default (phys) */
+  --burstColor: #e7f0ff;
+  --burstGlow:  0 0 12px rgba(140,170,255,.9);
+  --backTint:   rgba(0,0,0,0.25);
+}
+
+/* effect palettes */
+.effect-fire {
+  --burstColor: #ffcf6a;
+  --burstGlow:  0 0 14px rgba(255,170,60,.95);
+  --backTint:   rgba(255,120,40,0.12);
+}
+.effect-poison {
+  --burstColor: #9bf063;
+  --burstGlow:  0 0 14px rgba(120,230,90,.9);
+  --backTint:   rgba(60,160,60,0.12);
+}
+.effect-arcane {
+  --burstColor: #bca9ff;
+  --burstGlow:  0 0 16px rgba(150,130,255,.95);
+  --backTint:   rgba(120,90,255,0.10);
+}
+.effect-heal {
+  --burstColor: #9fffd2;
+  --burstGlow:  0 0 14px rgba(120,255,200,.9);
+  --backTint:   rgba(50,180,140,0.12);
+}
+/* phys = defaults */
+
+.dice-overlay {
+  position: fixed; inset: 0; pointer-events: none; zIndex: 90;
+  display: grid; place-items: center; opacity: 0; transition: opacity 120ms ease;
+}
+.dice-overlay.show { opacity: 1; }
+
+.backdrop {
+  position: absolute; inset: 0; backdrop-filter: blur(2px);
+  background: rgba(0,0,0,0.0); transition: background 140ms linear;
+}
+.backdrop.rolling { background: var(--backTint, rgba(0,0,0,0.25)); }
+.backdrop.settle  { background: rgba(0,0,0,0.35); }
+
+.dice-stage {
+  pointer-events: none; display: grid; place-items: center; gap: 12px;
+  transform-style: preserve-3d;
+}
+
+/* stage shake when settle */
+.dice-stage.shake {
+  animation: stageShake 220ms cubic-bezier(.36,.07,.19,.97) 1;
+}
+@keyframes stageShake {
+  10%, 90% { transform: translate3d(-1px, 0, 0) }
+  20%, 80% { transform: translate3d(2px, 0, 0) }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0) }
+  40%, 60% { transform: translate3d(4px, 0, 0) }
+}
+
+/* soft ground shadow */
+.die-shadow {
+  width: 140px; height: 34px; border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,.35), rgba(0,0,0,0) 70%);
+  filter: blur(8px);
+  transform: translateY(78px) scale(1);
+  opacity: .75;
+  animation: shadowWobble 700ms ease-in-out infinite;
+}
+.die-shadow.settle {
+  animation: none; transition: transform 180ms ease, opacity 180ms ease;
+  transform: translateY(78px) scale(.95); opacity: .6;
+}
+@keyframes shadowWobble {
+  0%,100% { transform: translateY(78px) scale(1); }
+  50%     { transform: translateY(80px) scale(1.1); }
+}
+
+/* 3D cube */
+.die {
+  width: 120px; height: 120px; position: relative;
+  transform-style: preserve-3d;
+  animation: diceSpin 720ms cubic-bezier(.25,.8,.25,1) infinite,
+             floatBob 1200ms ease-in-out infinite;
+  filter: drop-shadow(0 14px 28px rgba(0,0,0,.45));
+}
+.die.settle {
+  animation: settleBounce 190ms cubic-bezier(.2,1.1,.25,1.0) 1 forwards;
+  transition: transform 200ms cubic-bezier(.2,.9,.25,1.2);
+}
+
+@keyframes diceSpin {
+  0%   { transform: rotateX(0deg) rotateY(0deg); }
+  100% { transform: rotateX(var(--spinX)) rotateY(var(--spinY)); }
+}
+@keyframes floatBob {
+  0%,100% { transform: translateZ(0); }
+  50%     { transform: translateZ(4px); }
+}
+@keyframes settleBounce {
+  0%   { transform: scale(1.06); }
+  60%  { transform: scale(0.98); }
+  100% { transform: scale(1.00); }
+}
+
+/* faces */
+.face {
+  position: absolute; inset: 0; border-radius: 18px;
+  display: grid; place-items: center;
+  border: 2px solid rgba(0,0,0,.75);
+  box-shadow:
+    inset 0 4px 10px rgba(0,0,0,.15),
+    inset 0 -6px 14px rgba(0,0,0,.18);
+}
+
+/* themes */
+.theme-white .face { background: linear-gradient(180deg,#ffffff,#e9eef6); }
+.theme-black .face { background: linear-gradient(180deg,#32353a,#16191e); border-color:#000; }
+.theme-gold  .face { background: linear-gradient(180deg,#ffd36d,#d09a2e); border-color:#7a520f; }
+
+.pips { width: 72%; height: 72%; position: relative; }
+.pip {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #0b0f15;
+  box-shadow: inset 0 2px 2px rgba(255,255,255,.15), inset 0 -2px 2px rgba(0,0,0,.35);
+  position: absolute;
+}
+.theme-white .pip { background:#0a0d12; }
+.theme-black .pip { background:#e9edf3; }
+.theme-gold  .pip { background:#3b2a0b; }
+
+/* pip layouts */
+.p1 .pip { left: calc(50% - 8px); top: calc(50% - 8px); }
+
+.p2 .pip:nth-child(1){ left:18%; top:18%; }
+.p2 .pip:nth-child(2){ right:18%; bottom:18%; position:absolute; }
+
+.p3 .pip:nth-child(1){ left:18%; top:18%; }
+.p3 .pip:nth-child(2){ left:calc(50% - 8px); top:calc(50% - 8px); }
+.p3 .pip:nth-child(3){ right:18%; bottom:18%; position:absolute; }
+
+.p4 .pip:nth-child(1){ left:18%; top:18%; }
+.p4 .pip:nth-child(2){ right:18%; top:18%; position:absolute; }
+.p4 .pip:nth-child(3){ left:18%; bottom:18%; position:absolute; }
+.p4 .pip:nth-child(4){ right:18%; bottom:18%; position:absolute; }
+
+.p5 .pip:nth-child(1){ left:18%; top:18%; }
+.p5 .pip:nth-child(2){ right:18%; top:18%; position:absolute; }
+.p5 .pip:nth-child(3){ left:calc(50% - 8px); top:calc(50% - 8px); }
+.p5 .pip:nth-child(4){ left:18%; bottom:18%; position:absolute; }
+.p5 .pip:nth-child(5){ right:18%; bottom:18%; position:absolute; }
+
+.p6 .pip:nth-child(1){ left:18%; top:18%; }
+.p6 .pip:nth-child(2){ right:18%; top:18%; position:absolute; }
+.p6 .pip:nth-child(3){ left:18%; top:calc(50% - 8px); position:absolute; }
+.p6 .pip:nth-child(4){ right:18%; top:calc(50% - 8px); position:absolute; }
+.p6 .pip:nth-child(5){ left:18%; bottom:18%; position:absolute; }
+.p6 .pip:nth-child(6){ right:18%; bottom:18%; position:absolute; }
+
+/* 3D placement for cube faces */
+.face.f1 { transform: translateZ(60px); }
+.face.f6 { transform: rotateY(180deg) translateZ(60px); }
+.face.f2 { transform: rotateY(90deg)  translateZ(60px); }
+.face.f5 { transform: rotateY(-90deg) translateZ(60px); }
+.face.f3 { transform: rotateX(90deg)  translateZ(60px); }
+.face.f4 { transform: rotateX(-90deg) translateZ(60px); }
+
+/* sheen on settle */
+.sheen { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; pointer-events: none; }
+.sheen::after {
+  content: ""; position: absolute; inset: -40% -60%;
+  background: linear-gradient(75deg, rgba(255,255,255,0) 35%, rgba(255,255,255,.35) 50%, rgba(255,255,255,0) 65%);
+  transform: translateX(-60%) rotate(10deg);
+  opacity: 0;
+}
+.die.settle .sheen::after { animation: sheenSweep 380ms ease forwards; }
+@keyframes sheenSweep {
+  0%   { opacity: .0; transform: translateX(-60%) rotate(10deg); }
+  30%  { opacity: .35; }
+  100% { opacity: 0; transform: translateX(60%) rotate(10deg); }
+}
+
+/* particle burst */
+.burst { position: absolute; }
+.spark {
+  position: absolute; left: 0; top: 0; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--burstColor);
+  box-shadow: var(--burstGlow);
+  opacity: 0; transform-origin: 0 0;
+}
+.burst.settle .spark { animation: pop 360ms ease-out forwards; }
+@keyframes pop {
+  0%   { opacity: 0; transform: scale(.4) translateX(0); }
+  20%  { opacity: 1; transform: scale(1) translateX(6px); }
+  100% { opacity: 0; transform: scale(.85) translateX(0); }
+}
+
+/* result label */
+.result {
+  font-weight: 800; letter-spacing: .5px; opacity: 0;
+  color: #e8ecf1; text-shadow: 0 2px 10px rgba(0,0,0,.38);
+  transform: translateY(10px) scale(.98);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.result.settle { opacity: .98; transform: translateY(0) scale(1.02); }

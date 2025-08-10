@@ -1,434 +1,716 @@
 // src/App.jsx
-import React, { useEffect, useRef, useState } from "react";
-import GameEngine from "./engine";
+import React, { useMemo, useState, useEffect } from "react";
+import {
+  gameState,
+  selectClass,
+  chooseInitialSpells,
+  rollDiceForPlayer,
+  acceptUpgrade,
+  declineUpgrade,
+} from "./engine";
+import { getSpellSpriteInfo } from "./spells";
 
-// Art & slicer
-import { SHEETS, ACCESSORY_BY_D20, ACCESSORY_INFO } from "./art/manifest.js";
-import { loadSheet, Portrait } from "./art/slicer.jsx";
+/* -------------------------------------------------------
+   SpriteStrip — supports horizontal or vertical 1×N strips
+   NEW: autoFrames=true deduces total frames from image size
+   using frameSize (defaults to your 500×375 per-frame assets)
+--------------------------------------------------------*/
+function SpriteStrip({
+  sheetUrl,
+  frames = 1,              // ignored if autoFrames=true
+  frameIndex = 0,
+  width = 96,
+  orientation = "vertical", // "horizontal" | "vertical"
+  title,
+  border = true,
+  autoFrames = false,       // NEW
+  frameSize = { w: 500, h: 375 }, // NEW (native per-frame size)
+}) {
+  const [img, setImg] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = new Image();
+    el.onload = () => setImg({ w: el.width, h: el.height });
+    el.src = sheetUrl;
+  }, [sheetUrl]);
 
-// Modals
-import UpgradeChooser from "./ui/UpgradeChooser.jsx";
-import LootModal from "./ui/LootModal.jsx";
+  const aspectHeight = Math.round((frameSize.h / frameSize.w) * width);
 
-// ===== Simple Toasts =====
-function ToastLayer({ toasts }) {
-  return (
-    <div style={{ position:'fixed', right:12, top:12, display:'grid', gap:8, zIndex:80 }}>
-      {toasts.map(t => (
-        <div key={t.id} style={{
-          background:'#12151a', border:'1px solid #2b3342', color:'#dfe6ef',
-          borderRadius:10, padding:'8px 10px', minWidth:200, boxShadow:'0 6px 20px rgba(0,0,0,.35)'
-        }}>{t.msg}</div>
-      ))}
-    </div>
-  );
-}
+  if (!img.w || !img.h) {
+    return (
+      <div
+        style={{
+          width,
+          height: aspectHeight,
+          borderRadius: 12,
+          background: "#0b0e13",
+          border: "1px solid #242a34",
+        }}
+      />
+    );
+  }
 
-// ===== Error Boundary =====
-class ErrorBoundary extends React.Component {
-  constructor(p){ super(p); this.state = { error:null }; }
-  static getDerivedStateFromError(error){ return { error }; }
-  componentDidCatch(error, info){ console.error("ErrorBoundary:", error, info); }
-  render(){
-    if(this.state.error){
-      return (
-        <div style={{ padding:16, background:"#1a1f29", color:"#fff", fontFamily:"monospace" }}>
-          <h2>Runtime error</h2>
-          <pre>{String(this.state.error?.stack || this.state.error)}</pre>
-          <div>Check the browser console for details.</div>
-        </div>
-      );
-    }
-    return this.props.children;
+  let total = frames;
+  if (autoFrames) {
+    total =
+      orientation === "horizontal"
+        ? Math.max(1, Math.floor(img.w / frameSize.w))
+        : Math.max(1, Math.floor(img.h / frameSize.h));
+  }
+
+  const idx = Math.max(0, Math.min(total - 1, frameIndex));
+
+  if (orientation === "horizontal") {
+    const frameW = Math.floor(img.w / total);
+    const frameH = img.h;
+    const scale = width / frameW;
+    const height = Math.round(frameH * scale);
+    const bgW = img.w * scale;
+    const bgH = height;
+    const offsetX = -(idx * frameW * scale);
+    return (
+      <div
+        title={title}
+        style={{
+          width,
+          height,
+          borderRadius: 12,
+          backgroundColor: "#0d1117",
+          backgroundImage: `url(${sheetUrl})`,
+          backgroundRepeat: "no-repeat",
+          backgroundSize: `${bgW}px ${bgH}px`,
+          backgroundPosition: `${offsetX}px 0`,
+          imageRendering: "pixelated",
+          border: border ? "1px solid #2b3342" : "none",
+          overflow: "hidden",
+        }}
+      />
+    );
+  } else {
+    const frameW = img.w;
+    const frameH = Math.floor(img.h / total);
+    const scale = width / frameW;
+    const height = Math.round(frameH * scale);
+    const bgH = img.h * scale;
+    const offsetY = -(idx * frameH * scale);
+    return (
+      <div
+        title={title}
+        style={{
+          width,
+          height,
+          borderRadius: 12,
+          backgroundColor: "#0d1117",
+          backgroundImage: `url(${sheetUrl})`,
+          backgroundRepeat: "no-repeat",
+          backgroundSize: `${width}px ${bgH}px`,
+          backgroundPosition: `center ${offsetY}px`,
+          imageRendering: "pixelated",
+          border: border ? "1px solid #2b3342" : "none",
+          overflow: "hidden",
+        }}
+      />
+    );
   }
 }
 
-export default function App(){
-  const engineRef = useRef(null);
-
-  // Art sheets
-  const [art, setArt] = useState({ tier1:null, tier2:null, boss:null, items:null });
-
-  // Game state mirrors
-  const [party, setParty] = useState([]);
-  const [enemies, setEnemies] = useState([]);
-  const [log, setLog] = useState([]);
-  const [upgradeChoice, setUpgradeChoice] = useState(null);
-
-  // Loot modal
-  const [lootOffer, setLootOffer] = useState(null);
-
-  // Settings (persist)
-  const [settings, setSettings] = useState(() => {
-    try {
-      const raw = localStorage.getItem('diceArenaSettings');
-      return raw ? JSON.parse(raw) : { toastsEnabled: true, vfxEnabled: true };
-    } catch {
-      return { toastsEnabled: true, vfxEnabled: true };
-    }
-  });
-
-  // Toasts & VFX
-  const [toasts, setToasts] = useState([]);
-  const [vfx, setVfx] = useState([]); // array of {id,type,target,heroId?,enemyId?}
-
-  const addToast = (msg) => {
-    if (!settings.toastsEnabled) return;
-    const id = Math.random().toString(36).slice(2,8);
-    setToasts(t => [...t, { id, msg }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 1800);
-  };
-
-  const pushVfx = (evt) => {
-    if (!settings.vfxEnabled) return;
-    const id = Math.random().toString(36).slice(2,8);
-    const entry = { id, ...evt };
-    setVfx(list => [...list, entry]);
-    setTimeout(() => setVfx(list => list.filter(x => x.id !== id)), 650);
-  };
-
-  // ---------- Boot engine ----------
+/* -------------------------------------------------------
+   GridSprite — for multi-row sheets (enemies/accessories)
+--------------------------------------------------------*/
+function GridSprite({
+  sheetUrl,
+  cols,
+  rows,
+  index = 0,
+  width = 120,
+  title,
+  border = true,
+}) {
+  const [img, setImg] = useState({ w: 0, h: 0 });
   useEffect(() => {
-    const e = new GameEngine();
-    e.init();
-    e.push = (msg) => setLog((prev)=>[msg, ...prev].slice(0,200));
-    e.toast = addToast;
-    e.emitVfx = pushVfx;
-    e.settings = { ...settings };            // pass initial settings
-    e._triggerLootOffer = (hero, d20) => {
-      const idx = ACCESSORY_BY_D20[d20] ?? 0;
-      setLootOffer({ heroId: hero.id, heroName: hero.name, d20, itemIndex: idx });
-    };
-    engineRef.current = e;
-  }, []); // eslint-disable-line
+    const el = new Image();
+    el.onload = () => setImg({ w: el.width, h: el.height });
+    el.src = sheetUrl;
+  }, [sheetUrl]);
 
-  // Keep engine enemies in sync
-  useEffect(() => {
-    if (!engineRef.current) return;
-    engineRef.current._enemies = enemies;
-  }, [enemies]);
-
-  // Keep engine settings synced + persist
-  useEffect(() => {
-    try { localStorage.setItem('diceArenaSettings', JSON.stringify(settings)); } catch {}
-    if (engineRef.current) engineRef.current.settings = { ...settings };
-  }, [settings]);
-
-  // ---------- Load art sheets ----------
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const [tier1, tier2, boss, items] = await Promise.all([
-        loadSheet(SHEETS.tier1),
-        loadSheet(SHEETS.tier2),
-        loadSheet(SHEETS.boss),
-        loadSheet(SHEETS.items),
-      ]);
-      if (!alive) return;
-      setArt({ tier1, tier2, boss, items });
-    })();
-    return () => { alive = false; };
-  }, []);
-
-  // ---------- Seed demo ----------
-  useEffect(() => {
-    const app = engineRef.current; if (!app) return;
-    if (party.length === 0) {
-      const hero = app.buildHero?.("Hero", "king");
-      app.party = [hero];
-      setParty([hero]);
-    }
-    if (enemies.length === 0) {
-      setEnemies([{ id: 1, name: "T1 Enemy", hp: 12, armor: 1, tier: 1 }]);
-    }
-  }, [party.length, enemies.length]);
-
-  const refreshFromEngine = () => {
-    const app = engineRef.current;
-    setParty([...(app?.party || [])]);
-    setEnemies([...(app?._enemies || [])]);
-    setUpgradeChoice(app?._upgradeChoice || null);
-  };
-
-  // ---------- Actions ----------
-  const startEncounter = () => {
-    const app = engineRef.current; if (!app) return;
-    app.startEncounter?.();
-    refreshFromEngine();
-  };
-
-  const doTurn = () => {
-    const app = engineRef.current; if (!app || party.length === 0) return;
-    const hero = party[0];
-    const face = app.rollFace?.(hero);
-    if (face) {
-      app.push?.(`Rolled: ${face.name} (T${face.tier || 0})`);
-      app.resolveFace?.(hero, face);
-      app.endHeroTurn?.(hero);
-    }
-    refreshFromEngine();
-  };
-
-  const addEnemy = (tier = 1) => {
-    const app = engineRef.current; if (!app) return;
-    const nextId = ((enemies.length % 20) + 1);
-    app.spawnEnemy?.({
-      id: nextId,
-      name: `T${tier} Enemy #${enemies.length + 1}`,
-      hp: 12 + tier * 4,
-      armor: Math.max(0, tier - 1),
-      tier,
-    });
-    app.push?.(`Spawned Tier ${tier} enemy.`);
-    refreshFromEngine();
-  };
-
-  const clearEnemies = () => {
-    engineRef.current?.clearEnemies?.();
-    engineRef.current?.push?.("Cleared all enemies.");
-    refreshFromEngine();
-  };
-
-  const testLoot = () => {
-    const app = engineRef.current; if (!app || party.length===0) return;
-    const hero = party[0];
-    const d20 = app.rollD20?.() || 1;
-    const idx = ACCESSORY_BY_D20[d20] ?? 0;
-    setLootOffer({ heroId: hero.id, heroName: hero.name, d20, itemIndex: idx });
-    app.push?.(`(Test) Loot offer created for ${hero.name} (d20=${d20}).`);
-  };
-
-  // ---------- Portrait helpers ----------
-  const EnemyPortrait = ({ e, size=120 }) => {
-    if (!e) return null;
-    const active = vfx.filter(v => v.target==='enemy' && v.enemyId===e.id).map(v=>v.type);
-    const hit = active.includes('hit');
-    const burn = active.includes('burn');
-    const heal = active.includes('heal');
-
+  if (!img.w || !img.h || cols <= 0 || rows <= 0) {
     return (
-      <div style={{ position:'relative', width:size, height:size }}>
-        <div style={{
-          position:'absolute', inset: -4, borderRadius:12,
-          boxShadow: hit ? '0 0 0 2px rgba(255,80,80,.9), inset 0 0 20px rgba(255,80,80,.35)' :
-                     heal ? '0 0 0 2px rgba(120,255,160,.9), inset 0 0 20px rgba(120,255,160,.35)' :
-                     burn ? '0 0 0 2px rgba(255,150,50,.9), inset 0 0 20px rgba(255,150,50,.35)' :
-                            'none',
-          transition:'box-shadow 80ms linear', pointerEvents:'none'
-        }} />
-        {e.tier === 1 && art.tier1 && <Portrait sheet={art.tier1} index={(e.id-1)} size={size} />}
-        {e.tier === 2 && art.tier2 && <Portrait sheet={art.tier2} index={(e.id-1)} size={size} />}
-        {e.tier >= 3 && art.boss  && <Portrait sheet={art.boss}  index={(e.id-1)} size={size} />}
-      </div>
+      <div
+        style={{
+          width,
+          height: Math.round((375 / 500) * width),
+          borderRadius: 12,
+          background: "#0b0e13",
+          border: "1px solid #242a34",
+        }}
+      />
     );
-  };
+  }
 
-  const ItemPortrait = ({ index, size=64, title }) => {
-    if (!art.items) return <div style={{ width:size, height:size, outline:"1px dashed #444" }} title={title}/>;
-    return (
-      <div title={title} style={{ display:'inline-block', lineHeight:0 }}>
-        <Portrait sheet={art.items} index={index} size={size} />
-      </div>
-    );
-  };
+  const frameW = Math.floor(img.w / cols);
+  const frameH = Math.floor(img.h / rows);
+  const scale = width / frameW;
+  const height = Math.round(frameH * scale);
 
-  // ---------- Loot modal handlers ----------
-  const acceptLoot = (replaceIndexOrNull) => {
-    const app = engineRef.current; if (!app || !lootOffer) return;
-    app._lootOffer = { heroId: lootOffer.heroId, d20: lootOffer.d20, itemIndex: lootOffer.itemIndex };
-    app.commitAccessory?.(true, replaceIndexOrNull);
-    setLootOffer(null);
-    refreshFromEngine();
-  };
+  const col = index % cols;
+  const row = Math.floor(index / cols);
 
-  const skipLoot = () => {
-    const app = engineRef.current; if (!app || !lootOffer) return;
-    app._lootOffer = { heroId: lootOffer.heroId, d20: lootOffer.d20, itemIndex: lootOffer.itemIndex };
-    app.commitAccessory?.(false);
-    setLootOffer(null);
-    refreshFromEngine();
-  };
-
-  const itemTitle = (idx) => {
-    const info = ACCESSORY_INFO[idx] || {};
-    if (!info.name) return `Item #${(idx ?? 0)+1}`;
-    return `${info.name}\n${info.desc || ''}`.trim();
-  };
-
-  const lootHero = lootOffer
-    ? (party.find(h => h.id === lootOffer.heroId) || party[0] || null)
-    : null;
-
-  const heroVfx = (hero) => vfx.filter(v => v.target==='hero' && v.heroId===hero.id).map(v=>v.type);
+  const bgW = img.w * scale;
+  const bgH = img.h * scale;
+  const offsetX = -(col * frameW * scale);
+  const offsetY = -(row * frameH * scale);
 
   return (
-    <ErrorBoundary>
-      <div style={{ minHeight: "100vh", background: "#0e1116", color: "#e8ecf1", fontFamily: "system-ui, Segoe UI, Roboto, Arial, sans-serif" }}>
-        <div style={{ maxWidth: 1140, margin: "0 auto", padding: 16 }}>
-          <h1 style={{ margin: "6px 0 12px 0" }}>Dice Arena — VFX & Toasts</h1>
+    <div
+      title={title}
+      style={{
+        width,
+        height,
+        borderRadius: 12,
+        backgroundColor: "#0d1117",
+        backgroundImage: `url(${sheetUrl})`,
+        backgroundRepeat: "no-repeat",
+        backgroundSize: `${bgW}px ${bgH}px`,
+        backgroundPosition: `${offsetX}px ${offsetY}px`,
+        imageRendering: "pixelated",
+        border: border ? "1px solid #2b3342" : "none",
+        overflow: "hidden",
+      }}
+    />
+  );
+}
 
-          {/* Controls */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            <button onClick={startEncounter} className="btn">Start Encounter</button>
-            <button onClick={doTurn} className="btn">Roll & Resolve</button>
-            <button onClick={() => addEnemy(1)} className="btn secondary">+ Tier 1</button>
-            <button onClick={() => addEnemy(2)} className="btn secondary">+ Tier 2</button>
-            <button onClick={() => addEnemy(3)} className="btn secondary">+ Boss</button>
-            <button onClick={clearEnemies} className="btn" style={{ marginLeft: "auto" }}>Clear Enemies</button>
-            <button onClick={testLoot} className="btn tertiary">Test Tier-2 Loot</button>
-          </div>
+/* ------------------------------ UI atoms ------------------------------ */
+function Card({ children, style }) {
+  return (
+    <div
+      style={{
+        background: "#0b0e13",
+        border: "1px solid #242a34",
+        borderRadius: 12,
+        padding: 12,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+const btn = (variant = "primary") => ({
+  background:
+    variant === "primary"
+      ? "#1d3557"
+      : variant === "ghost"
+      ? "transparent"
+      : "#12151a",
+  border:
+    variant === "primary"
+      ? "1px solid #2b4f7c"
+      : variant === "ghost"
+      ? "1px solid transparent"
+      : "1px solid #2b3342",
+  color: variant === "primary" ? "#e8f1ff" : "#dfe6ef",
+  borderRadius: 10,
+  padding: "10px 14px",
+  cursor: "pointer",
+});
 
-          {/* Settings Panel */}
-          <div style={{ background:"#12151a", border:"1px solid #242a34", borderRadius:12, padding:12, marginBottom:12 }}>
-            <div style={{ fontWeight:700, marginBottom:8 }}>Settings</div>
-            <div style={{ display:'flex', gap:18, alignItems:'center', flexWrap:'wrap' }}>
-              <label style={{ display:'inline-flex', alignItems:'center', gap:8, cursor:'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={!!settings.toastsEnabled}
-                  onChange={(e)=>setSettings(s=>({ ...s, toastsEnabled: e.target.checked }))}
-                />
-                <span>Enable Toasts</span>
-              </label>
-              <label style={{ display:'inline-flex', alignItems:'center', gap:8, cursor:'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={!!settings.vfxEnabled}
-                  onChange={(e)=>setSettings(s=>({ ...s, vfxEnabled: e.target.checked }))}
-                />
-                <span>Enable VFX (glows, pulses)</span>
-              </label>
-              <div style={{ opacity:.65, fontSize:13 }}>
-                (Saved automatically)
+/* ------------------------------ App ------------------------------ */
+export default function App() {
+  const [tick, setTick] = useState(0);
+  const force = () => setTick((t) => t + 1);
+
+  const phase = gameState.phase;
+
+  // ====== Class Select ======
+  const onPickClass = (classKey) => {
+    selectClass(0, classKey);
+    gameState.phase = "spellSelect";
+    force();
+  };
+
+  // ====== Spell Select ======
+  const t1Opts = gameState.players[0]?.t1Options || [];
+  const t2Opts = gameState.players[0]?.t2Options || [];
+  const [t1Pick, setT1Pick] = useState(new Set());
+  const [t2Pick, setT2Pick] = useState(null);
+
+  const toggleT1 = (i) => {
+    const cp = new Set(t1Pick);
+    if (cp.has(i)) cp.delete(i);
+    else {
+      if (cp.size >= 2) return;
+      cp.add(i);
+    }
+    setT1Pick(cp);
+  };
+  const chooseT2 = (i) => setT2Pick(i);
+
+  const canFinalize =
+    phase === "spellSelect" && t1Pick.size === 2 && t2Pick !== null;
+
+  const finalizeBuild = () => {
+    if (!canFinalize) return;
+    chooseInitialSpells(0, [...t1Pick], t2Pick);
+    force();
+  };
+
+  // ====== Battle ======
+  const player = gameState.players[0];
+  const enemy =
+    gameState.enemies.find((e) => e.hp > 0) || gameState.enemies[0] || null;
+
+  const rollTurn = () => {
+    rollDiceForPlayer(0);
+    force();
+  };
+
+  const pending = player?.upgradePending || null;
+  const lastLine = useMemo(() => gameState.log[0] || "—", [tick]);
+
+  // HP bar
+  const Bar = ({ value, max = 20, color = "#38bdf8" }) => {
+    const pct = Math.max(0, Math.min(100, (value / max) * 100));
+    return (
+      <div
+        style={{
+          background: "#0e1620",
+          border: "1px solid #1f2b3a",
+          borderRadius: 8,
+          height: 12,
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ width: `${pct}%`, height: "100%", background: color }} />
+      </div>
+    );
+  };
+
+  // Spell icon — ALL TIERS vertical + autoFrames (handles blanks)
+  const SpellIcon = ({ spell, width = 90 }) => {
+    if (!spell) {
+      return (
+        <div
+          style={{
+            width,
+            height: Math.round((375 / 500) * width),
+            borderRadius: 12,
+            background: "rgba(255,255,255,.03)",
+            border: "1px dashed #2b3342",
+          }}
+        />
+      );
+    }
+    const { sheetUrl, frame } = getSpellSpriteInfo(spell);
+    return (
+      <SpriteStrip
+        sheetUrl={sheetUrl}
+        frameIndex={frame}
+        width={width}
+        orientation="vertical"
+        autoFrames
+      />
+    );
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0e1116",
+        color: "#e8ecf1",
+        fontFamily: "system-ui, Segoe UI, Roboto, Arial, sans-serif",
+      }}
+    >
+      <div style={{ maxWidth: 1140, margin: "0 auto", padding: 16 }}>
+        <h1 style={{ margin: "4px 0 12px 0" }}>Dice Arena — PvE Battle Loop</h1>
+
+        {/* PHASE: Class Select */}
+        {phase === "classSelect" && (
+          <Card>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>
+              Choose your class
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
+                gap: 10,
+              }}
+            >
+              {gameState.classes.map((cls) => (
+                <button
+                  key={cls.key}
+                  onClick={() => onPickClass(cls.key)}
+                  style={{ ...btn("secondary"), textAlign: "left" }}
+                >
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    {/* class-logos.png is a 1×8 vertical strip */}
+                    <SpriteStrip
+                      sheetUrl="/art/class-logos.png"
+                      frames={8}
+                      frameIndex={cls.frame}
+                      width={96}
+                      orientation="vertical"
+                      title={cls.name}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{cls.name}</div>
+                      <div style={{ opacity: 0.8, fontSize: 13 }}>{cls.ability}</div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* PHASE: Spell Select */}
+        {phase === "spellSelect" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <Card>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                Pick two Tier-1 spells
               </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+                  gap: 10,
+                }}
+              >
+                {t1Opts.map((s, i) => {
+                  const on = t1Pick.has(i);
+                  return (
+                    <button
+                      key={`t1-${i}`}
+                      onClick={() => toggleT1(i)}
+                      style={{ ...btn(on ? "primary" : "secondary"), textAlign: "left" }}
+                    >
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <SpellIcon spell={s} width={96} />
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{s.name}</div>
+                          <div style={{ opacity: 0.7, fontSize: 13 }}>
+                            Tier {s.tier} — {s.type}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.8 }}>
+                Selected: {t1Pick.size} / 2
+              </div>
+            </Card>
+
+            <Card>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                Pick one Tier-2 spell
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+                  gap: 10,
+                }}
+              >
+                {t2Opts.map((s, i) => {
+                  const on = t2Pick === i;
+                  return (
+                    <button
+                      key={`t2-${i}`}
+                      onClick={() => chooseT2(i)}
+                      style={{ ...btn(on ? "primary" : "secondary"), textAlign: "left" }}
+                    >
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <SpellIcon spell={s} width={96} />
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{s.name}</div>
+                          <div style={{ opacity: 0.7, fontSize: 13 }}>
+                            Tier {s.tier} — {s.type}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.8 }}>
+                Selected: {t2Pick !== null ? 1 : 0} / 1
+              </div>
+            </Card>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={finalizeBuild}
+                disabled={!canFinalize}
+                style={{ ...btn("primary"), opacity: canFinalize ? 1 : 0.6 }}
+              >
+                Finalize & Start
+              </button>
             </div>
           </div>
+        )}
 
-          {/* Party (with inventory) */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 12, marginBottom: 12 }}>
-            {party.map((h) => {
-              const active = heroVfx(h);
-              const hit = active.includes('hit');
-              const heal = active.includes('heal');
-              const loot = active.includes('loot');
-
-              return (
-                <div key={h.id} style={{ background: "#12151a", border: "1px solid #242a34", borderRadius: 12, padding: 12 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{h.name} <span style={{ opacity: .6 }}>(class: {h.classId})</span></div>
-                  <div style={{ display: "flex", gap: 12 }}>
-                    <div style={{ position:'relative', width: 100, height: 100, outline: "1px dashed #333", display: "flex", alignItems: "center", justifyContent: "center", borderRadius:12 }}>
-                      <div style={{
-                        position:'absolute', inset:-4, borderRadius:12,
-                        boxShadow: !settings.vfxEnabled ? 'none' :
-                          hit ? '0 0 0 2px rgba(255,80,80,.9), inset 0 0 20px rgba(255,80,80,.35)' :
-                          heal ? '0 0 0 2px rgba(120,255,160,.9), inset 0 0 20px rgba(120,255,160,.35)' :
-                          loot ? '0 0 0 2px rgba(140,170,255,.9), inset 0 0 20px rgba(140,170,255,.35)' :
-                                 'none',
-                        transition:'box-shadow 80ms linear', pointerEvents:'none'
-                      }} />
-                      <div style={{ fontSize: 12, opacity: .6 }}>Hero Art</div>
-                    </div>
-                    <div style={{ fontSize: 14, lineHeight: 1.5, flex: 1 }}>
-                      <div>HP: <b>{h.hp}</b> / {h.maxHp}</div>
-                      <div>Armor: <b>{h.armor || 0}</b></div>
-                      <div>Last Face: <b>{h._lastFace?.name || "—"}</b></div>
-
-                      {/* Inventory */}
-                      <div style={{ marginTop: 8 }}>
-                        <div className="small" style={{ opacity: .8, marginBottom: 4 }}>Accessories (max 2):</div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          {(h.inventory || []).map((idx, i) => (
-                            <ItemPortrait
-                              key={i}
-                              index={idx ?? 0}
-                              size={48}
-                              title={itemTitle(idx ?? 0)}
-                            />
-                          ))}
-                          {Array.from({length: Math.max(0, 2 - (h.inventory?.length || 0))}).map((_, i) => (
-                            <div key={`empty-${i}`} style={{ width:48, height:48, outline:"1px dashed #444", background:"rgba(255,255,255,.03)" }}/>
-                          ))}
+        {/* PHASE: Battle */}
+        {phase === "battle" && player && (
+          <>
+            <Card>
+              {/* Top: player & enemy */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {/* Player */}
+                <div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <SpriteStrip
+                      sheetUrl="/art/class-logos.png"
+                      frames={8}
+                      frameIndex={player.class.frame}
+                      width={120}
+                      orientation="vertical"
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 18 }}>
+                        {player.class.name}
+                      </div>
+                      <div style={{ display: "grid", gap: 6, marginTop: 6, fontSize: 14 }}>
+                        <div>
+                          HP: {player.hp} / {player.maxHp}
                         </div>
+                        <Bar value={player.hp} max={player.maxHp} color="#22c55e" />
+                        <div style={{ marginTop: 6 }}>Armor: {player.armor}</div>
                       </div>
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Enemies */}
-          <h3 style={{ margin: "16px 0 8px 0" }}>Enemies</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 12 }}>
-            {enemies.map((e, i) => (
-              <div key={i} style={{ background: "#12151a", border: "1px solid #242a34", borderRadius: 12, padding: 12, display: "flex", gap: 12, alignItems: "center" }}>
-                <EnemyPortrait e={e} size={120} />
-                <div style={{ fontSize: 14, lineHeight: 1.5 }}>
-                  <div style={{ fontWeight: 700 }}>{e.name}</div>
-                  <div>Tier: <b>{e.tier}</b></div>
-                  <div>HP: <b>{e.hp}</b></div>
-                  <div>Armor: <b>{e.armor || 0}</b></div>
-                  {e.tier === 2 && (
-                    <button
-                      style={{ marginTop: 8 }}
-                      className="btn tertiary"
-                      onClick={() => {
-                        const app = engineRef.current;
-                        app.applyDamage?.(party[0], e, 999, { type: 'attack' });
-                        refreshFromEngine();
-                      }}
-                    >
-                      Defeat (test drop)
-                    </button>
-                  )}
+                {/* Enemy */}
+                <div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    {enemy ? (
+                      <GridSprite
+                        sheetUrl={
+                          enemy.tier === 1
+                            ? "/art/Tier1.png"
+                            : enemy.tier === 2
+                            ? "/art/Tier2.png"
+                            : "/art/Boss.png"
+                        }
+                        cols={enemy.tier === 1 ? 10 : 5}
+                        rows={enemy.tier === 1 ? 2 : 4}
+                        index={0}
+                        width={120}
+                        title={enemy.name}
+                      />
+                    ) : (
+                      <div
+                        style={{ width: 120, height: Math.round((375 / 500) * 120) }}
+                      />
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 18 }}>
+                        {enemy?.name || "—"}
+                      </div>
+                      {enemy && (
+                        <div style={{ display: "grid", gap: 6, marginTop: 6, fontSize: 14 }}>
+                          <div>HP: {enemy.hp}</div>
+                          <Bar
+                            value={enemy.hp}
+                            max={enemy.tier === 1 ? 14 : enemy.tier === 2 ? 20 : 30}
+                            color="#ef4444"
+                          />
+                          <div style={{ marginTop: 6 }}>Armor: {enemy.armor}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
-            {enemies.length === 0 && <div style={{ opacity: .6 }}>No enemies yet…</div>}
-          </div>
 
-          {/* Log */}
-          <h3 style={{ margin: "16px 0 8px 0" }}>Log</h3>
-          <div style={{ background: "#0b0e13", border: "1px solid #242a34", borderRadius: 12, padding: 12, minHeight: 120 }}>
-            {log.length === 0 && <div style={{ opacity: .5 }}>No actions yet… click “Start Encounter”, then “Roll & Resolve”.</div>}
-            <div style={{ display: "grid", gap: 6 }}>
-              {log.map((line, idx) => <div key={idx} style={{ opacity: .9 }}>{line}</div>)}
-            </div>
-          </div>
-        </div>
+              {/* Die faces: [Class][Spell1][Spell2][Spell3][Spell4][Upgrade] */}
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(6, 1fr)",
+                  gap: 10,
+                }}
+              >
+                {/* Class */}
+                <div style={{ textAlign: "center" }}>
+                  <div className="small" style={{ opacity: 0.7, marginBottom: 6 }}>
+                    Class
+                  </div>
+                  <SpriteStrip
+                    sheetUrl="/art/class-logos.png"
+                    frames={8}
+                    frameIndex={player.class.frame}
+                    width={90}
+                    orientation="vertical"
+                  />
+                </div>
+                {/* 4 spells — vertical with autoFrames */}
+                {player.spells.map((sp, i) => (
+                  <div key={i} style={{ textAlign: "center" }}>
+                    <div className="small" style={{ opacity: 0.7, marginBottom: 6 }}>
+                      Spell {i + 1}
+                    </div>
+                    <SpellIcon spell={sp} width={90} />
+                  </div>
+                ))}
+                {/* Upgrade (single) — vertical safe with autoFrames (even if 1 frame) */}
+                <div style={{ textAlign: "center" }}>
+                  <div className="small" style={{ opacity: 0.7, marginBottom: 6 }}>
+                    Upgrade
+                  </div>
+                  <SpriteStrip
+                    sheetUrl="/art/UpgradeLogo.png"
+                    frameIndex={0}
+                    width={90}
+                    orientation="vertical"
+                    autoFrames
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <button onClick={rollTurn} style={btn("primary")}>
+                  Roll
+                </button>
+              </div>
+
+              <div style={{ marginTop: 8, opacity: 0.9 }}>
+                <b>Last:</b> {lastLine}
+              </div>
+            </Card>
+
+            {/* Log */}
+            <Card style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Log</div>
+              <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
+                {gameState.log.map((line, i) => (
+                  <div key={i} style={{ opacity: 0.92 }}>
+                    {line}
+                  </div>
+                ))}
+                {gameState.log.length === 0 && (
+                  <div style={{ opacity: 0.6 }}>No actions yet…</div>
+                )}
+              </div>
+            </Card>
+          </>
+        )}
 
         {/* Upgrade modal */}
-        <UpgradeChooser
-          choice={upgradeChoice}
-          onKeepNew={() => { engineRef.current?.commitUpgrade?.(true);  refreshFromEngine(); }}
-          onKeepOld={() => { engineRef.current?.commitUpgrade?.(false); refreshFromEngine(); }}
-          renderSprite={(info) => {
-            if (!info) return null;
-            const { tier, index } = info;
-            if (tier === 1 && art.tier1) return <Portrait sheet={art.tier1} index={index} size={96} />;
-            if (tier === 2 && art.tier2) return <Portrait sheet={art.tier2} index={index} size={96} />;
-            if (tier >= 3 && art.boss)  return <Portrait sheet={art.boss}  index={index} size={96} />;
-            return null;
-          }}
-        />
+        {pending && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 40,
+            }}
+          >
+            <div
+              style={{
+                background: "#0e1116",
+                color: "#e8ecf1",
+                border: "1px solid #242a34",
+                borderRadius: 12,
+                width: 760,
+                maxWidth: "95vw",
+              }}
+            >
+              <div
+                style={{
+                  padding: 12,
+                  borderBottom: "1px solid #242a34",
+                  fontWeight: 700,
+                }}
+              >
+                Upgrade
+              </div>
+              <div
+                style={{
+                  padding: 16,
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                {/* Old */}
+                <Card>
+                  <div className="small" style={{ opacity: 0.7, marginBottom: 4 }}>
+                    Old
+                  </div>
+                  {pending.old ? (
+                    <>
+                      <SpriteStrip
+                        sheetUrl={getSpellSpriteInfo(pending.old).sheetUrl}
+                        frameIndex={getSpellSpriteInfo(pending.old).frame}
+                        width={120}
+                        orientation="vertical"
+                        autoFrames
+                      />
+                      <div style={{ marginTop: 8, fontWeight: 700 }}>
+                        {pending.old.name}
+                      </div>
+                      <div className="small" style={{ opacity: 0.7 }}>
+                        Tier {pending.old.tier} — {pending.old.type}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ opacity: 0.8 }}>(Blank)</div>
+                  )}
+                </Card>
 
-        {/* Loot modal (with replace flow) */}
-        <LootModal
-          offer={lootOffer}
-          heroInventory={lootHero?.inventory || []}
-          onAccept={acceptLoot}
-          onSkip={skipLoot}
-          renderItem={(idx) => <Portrait sheet={art.items} index={idx ?? 0} size={96} />}
-          renderItemSmall={(idx) => <Portrait sheet={art.items} index={idx ?? 0} size={48} />}
-        />
-
-        {/* Toasts */}
-        <ToastLayer toasts={toasts} />
-
-        <footer style={{ textAlign: "center", padding: "12px 0", opacity: .6 }}>
-          Dice Arena — VFX (hit/heal/burn/loot) & toasts • Settings persisted.
-        </footer>
+                {/* New */}
+                <Card>
+                  <div className="small" style={{ opacity: 0.7, marginBottom: 4 }}>
+                    New
+                  </div>
+                  <SpriteStrip
+                    sheetUrl={getSpellSpriteInfo(pending.candidate).sheetUrl}
+                    frameIndex={getSpellSpriteInfo(pending.candidate).frame}
+                    width={120}
+                    orientation="vertical"
+                    autoFrames
+                  />
+                  <div style={{ marginTop: 8, fontWeight: 700 }}>
+                    {pending.candidate.name}
+                  </div>
+                  <div className="small" style={{ opacity: 0.7 }}>
+                    Tier {pending.candidate.tier} — {pending.candidate.type}
+                  </div>
+                </Card>
+              </div>
+              <div style={{ padding: "0 16px 16px", display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    acceptUpgrade(0);
+                    setTick((t) => t + 1);
+                  }}
+                  style={btn("primary")}
+                >
+                  Take New
+                </button>
+                <button
+                  onClick={() => {
+                    declineUpgrade(0);
+                    setTick((t) => t + 1);
+                  }}
+                  style={btn("secondary")}
+                >
+                  Keep Old
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </ErrorBoundary>
+    </div>
   );
 }
