@@ -1,125 +1,134 @@
 // src/spells.js
 
-// ---------- Tier 1 ----------
-export const TIER1 = [
-  { key: 'attack_t1', name: 'Attack', type: 'attack', tier: 1, dmg: 2, frame: 0 },
-  { key: 'heal_t1',   name: 'Heal',   type: 'heal',   tier: 1, heal: 1, frame: 1 },
-  { key: 'armor_t1',  name: 'Armor',  type: 'armor',  tier: 1, block: 2, frame: 2 },
-  { key: 'sweep_t1',  name: 'Sweep',  type: 'sweep',  tier: 1, dmg: 1, frame: 3 },
-  { key: 'fire_t1',   name: 'Fireball', type: 'fire', tier: 1, dmg: 1, pierce: true, frame: 4 },
-];
-
-// ---------- Tier 2 ----------
-export const TIER2 = [
-  { key: 'attack_t2', name: 'Attack',        type: 'attack', tier: 2, dmg: 4, frame: 0 },
-  { key: 'heal_t2',   name: 'Heal',          type: 'heal',   tier: 2, heal: 3, frame: 1 },
-  { key: 'armor_t2',  name: 'Armor',         type: 'armor',  tier: 2, block: 6, frame: 2 },
-  { key: 'conc_t2',   name: 'Concentration', type: 'conc',   tier: 2, mult: 2, stackable: true, frame: 3 },
-  { key: 'sweep_t2',  name: 'Sweep',         type: 'sweep',  tier: 2, dmg: 2, frame: 4 },
-  { key: 'fire_t2',   name: 'Fireball',      type: 'fire',   tier: 2, dmg: 3, pierce: true, frame: 5 },
-  { key: 'poison_t2', name: 'Poison',        type: 'poison', tier: 2, frame: 6 },
-  { key: 'bomb_t2',   name: 'Bomb',          type: 'bomb',   tier: 2, frame: 7 },
-];
-
-// ---------- Tier 3 ----------
-export const TIER3 = [
-  { key: 'attack_t3', name: 'Attack',   type: 'attack', tier: 3, dmg: 6, frame: 0 },
-  { key: 'sweep_t3',  name: 'Sweep',    type: 'sweep',  tier: 3, dmg: 4, frame: 1 },
-  { key: 'fire_t3',   name: 'Fireball', type: 'fire',   tier: 3, dmg: 5, pierce: true, frame: 2 },
-];
-
-// Quick lookup by tier
-export const BY_TIER = {
-  1: TIER1,
-  2: TIER2,
-  3: TIER3,
+// ===== Spell Frame Mapping =====
+// Each icon on your sheets is 500x375 (w x h).
+export const SPELL_FRAMES = {
+  1: {
+    // Tier 1 — first 5 slots used
+    attack: 0,
+    heal: 1,
+    armor: 2,
+    sweep: 3,
+    fireball: 4,
+  },
+  2: {
+    // Tier 2 — full row
+    attack: 0,
+    heal: 1,
+    armor: 2,
+    concentration: 3,
+    sweep: 4,
+    fireball: 5,
+    poison: 6,
+    bomb: 7,
+  },
+  3: {
+    // Tier 3 — first 3 slots used
+    attack: 0,
+    sweep: 1,
+    fireball: 2,
+  },
 };
 
-// Sprite sheet frame maps (so UI knows which sheet + index to draw)
-export const SPRITE_SOURCE = {
-  // which public sheet to use for a given tier
-  sheetForTier(tier) {
-    if (tier === 1) return '/art/Tier1Spells.png';
-    if (tier === 2) return '/art/Tier2Spells.png';
-    return '/art/Tier3Spells.png';
-  }
+// Public art paths (make sure these files exist in /public/art)
+const SHEETS = {
+  1: "/art/Tier1Spells.png",
+  2: "/art/Tier2Spells.png",
+  3: "/art/Tier3Spells.png",
 };
 
-// Utility: deep-ish clone
-const clone = (o) => JSON.parse(JSON.stringify(o));
+// ===== Names/Descriptions (EXPORTED) =====
+export const SPELLS = {
+  attack: {
+    name: "Attack",
+    desc: "Deal direct damage to an enemy.",
+    tier: 1,
+  },
+  heal: {
+    name: "Heal",
+    desc: "Restore health to an ally.",
+    tier: 1,
+  },
+  armor: {
+    name: "Armor",
+    desc: "Gain temporary protection that blocks damage.",
+    tier: 1,
+  },
+  sweep: {
+    name: "Sweep",
+    desc: "Damage multiple foes at once.",
+    tier: 1,
+  },
+  fireball: {
+    name: "Fireball",
+    desc: "Ignites a target with burning damage (ignores armor at higher tiers).",
+    tier: 1,
+  },
+  concentration: {
+    name: "Concentration",
+    desc: "Double the next spell’s effect; can stack if rolled multiple times before casting.",
+    tier: 2,
+  },
+  poison: {
+    name: "Poison",
+    desc: "Afflict a target with a poison die that deals damage over time.",
+    tier: 2,
+  },
+  bomb: {
+    name: "Bomb",
+    desc: "Give a target a bomb die that may explode for heavy damage or pass to another.",
+    tier: 2,
+  },
+};
 
-// Random helper
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
-// ---------- Public helpers ----------
-
-// Get a fresh random spell from a tier
-export function getRandomSpellFromTier(tier) {
-  const pool = BY_TIER[tier] || TIER1;
-  return clone(pick(pool));
-}
-
-// Upgrade a spell: T1 -> random T2, T2 -> random T3, T3 -> random T3 (swap)
-// Returns { old: <oldSpell>, candidate: <newSpell> }
-export function getUpgradeCandidate(spell) {
-  if (!spell || !spell.tier) {
-    // fallback: pretend it was T1
-    return { old: spell || null, candidate: getRandomSpellFromTier(2) };
+// ===== Flexible Sprite Info Helper (EXPORTED) =====
+// Works with either:
+//   getSpellSpriteInfo(2, "fireball")
+//   getSpellSpriteInfo({ tier: 2, type: "fireball" })
+export function getSpellSpriteInfo(spellOrTier, maybeKey) {
+  let tier, key;
+  if (typeof spellOrTier === "object" && spellOrTier) {
+    tier = spellOrTier.tier;
+    key = String(spellOrTier.type || "").toLowerCase();
+  } else {
+    tier = spellOrTier;
+    key = String(maybeKey || "").toLowerCase();
   }
-  const nextTier = Math.min(3, spell.tier + 1);
-  return { old: clone(spell), candidate: getRandomSpellFromTier(nextTier) };
+
+  const t = Number(tier) || 1;
+  const k = key || "attack";
+
+  const frame =
+    SPELL_FRAMES[t] && Number.isFinite(SPELL_FRAMES[t][k])
+      ? SPELL_FRAMES[t][k]
+      : 0;
+
+  const sheetUrl = SHEETS[t] || SHEETS[1];
+  return { sheetUrl, frame };
 }
 
-// For dice face art usage in UI:
-// Given a spell object -> { sheetUrl, frame }
-export function getSpellSpriteInfo(spell) {
-  if (!spell) return null;
-  return {
-    sheetUrl: SPRITE_SOURCE.sheetForTier(spell.tier),
-    frame: spell.frame ?? 0,
-    tier: spell.tier,
-  };
+// ===== Attach Default Spell Pools to Player (EXPORTED) =====
+export function attachDefaultPoolsToPlayer(player) {
+  const t1 = Object.keys(SPELL_FRAMES[1]);
+  const t2 = Object.keys(SPELL_FRAMES[2]);
+
+  // Randomly pick 3 T1 (player will choose 2)
+  player.t1Options = shuffle(t1)
+    .slice(0, 3)
+    .map((k) => ({ type: k, tier: 1, name: SPELLS[k]?.name || k }));
+
+  // Randomly pick 2 T2 (player will choose 1)
+  player.t2Options = shuffle(t2)
+    .slice(0, 2)
+    .map((k) => ({ type: k, tier: 2, name: SPELLS[k]?.name || k }));
+
+  if (!Array.isArray(player.spells)) player.spells = [null, null, null, null];
 }
 
-// Compute base numeric effect for rendering (not strict rules; engine does the real work)
-export function describeSpellShort(spell) {
-  if (!spell) return '';
-  switch (spell.type) {
-    case 'attack': return `Attack ${spell.dmg}`;
-    case 'heal':   return `Heal ${spell.heal}`;
-    case 'armor':  return `Armor ${spell.block}`;
-    case 'sweep':  return `Sweep ${spell.dmg} all`;
-    case 'fire':   return `Fire ${spell.dmg} (pierce)`;
-    case 'conc':   return `Concentration x${spell.mult}`;
-    case 'poison': return `Poison die`;
-    case 'bomb':   return `Bomb die`;
-    default:       return spell.name || 'Spell';
-  }
-}
-
-// Build initial face options for character creation:
-// returns { t1Options:[...3], t2Options:[...2] }
-export function rollInitialSpellOptions() {
-  // 3 T1 options, player will keep 2
-  const t1Pool = [...TIER1];
-  const t1Options = [];
-  for (let i = 0; i < 3; i++) {
-    const idx = Math.floor(Math.random() * t1Pool.length);
-    t1Options.push(clone(t1Pool.splice(idx, 1)[0]));
-  }
-  // 2 T2 options, player will keep 1
-  const t2Pool = [...TIER2];
-  const t2Options = [];
-  for (let i = 0; i < 2; i++) {
-    const idx = Math.floor(Math.random() * t2Pool.length);
-    t2Options.push(clone(t2Pool.splice(idx, 1)[0]));
-  }
-  return { t1Options, t2Options };
-}
-
-// A small rules helper for Concentration stacking (engine can call this)
-export function applyConcentrationMultiplier(baseValue, stacks = 0, mult = 2) {
-  let v = baseValue;
-  for (let i = 0; i < stacks; i++) v *= mult;
-  return v;
+// ===== Utility =====
+function shuffle(arr) {
+  return arr
+    .map((v) => ({ sort: Math.random(), value: v }))
+    .sort((a, b) => a.sort - b.sort)
+    .map((o) => o.value);
 }
