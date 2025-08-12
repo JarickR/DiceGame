@@ -1,134 +1,91 @@
 // src/spells.js
 
-// ===== Spell Frame Mapping =====
-// Each icon on your sheets is 500x375 (w x h).
-export const SPELL_FRAMES = {
-  1: {
-    // Tier 1 — first 5 slots used
-    attack: 0,
-    heal: 1,
-    armor: 2,
-    sweep: 3,
-    fireball: 4,
+// ---------- Spell catalog (names & short descriptions) ----------
+export const SPELLS = {
+  attack: {
+    key: "attack",
+    name: "Attack",
+    desc: "Deal physical damage to the target (blocked by armor).",
   },
-  2: {
-    // Tier 2 — full row
-    attack: 0,
-    heal: 1,
-    armor: 2,
-    concentration: 3,
-    sweep: 4,
-    fireball: 5,
-    poison: 6,
-    bomb: 7,
+  heal: {
+    key: "heal",
+    name: "Heal",
+    desc: "Restore HP to a target (can target self).",
   },
-  3: {
-    // Tier 3 — first 3 slots used
-    attack: 0,
-    sweep: 1,
-    fireball: 2,
+  armor: {
+    key: "armor",
+    name: "Armor",
+    desc: "Gain temporary armor that blocks incoming damage while active.",
+  },
+  sweep: {
+    key: "sweep",
+    name: "Sweep",
+    desc: "Deal light damage to multiple enemies.",
+  },
+  fireball: {
+    key: "fireball",
+    name: "Fireball",
+    desc: "Deal damage that ignores armor.",
+  },
+  concentration: {
+    key: "concentration",
+    name: "Concentration",
+    desc: "Next rolled spell has its effect doubled (can stack).",
+  },
+  poison: {
+    key: "poison",
+    name: "Poison",
+    desc: "Apply a poison die to the target (ticks at turn start; one face cures).",
+  },
+  bomb: {
+    key: "bomb",
+    name: "Bomb",
+    desc: "Give the target a bomb die that may explode or pass to adjacent players.",
   },
 };
 
-// Public art paths (make sure these files exist in /public/art)
-const SHEETS = {
+// ---------- Sprite frame maps per tier ----------
+// Your sheets are vertical sprite strips with frames of 500x375.
+// Tier 1 sheet: first 5 slots used (in this order)
+export const TIER1_POOL = ["attack", "heal", "armor", "sweep", "fireball"];
+// Tier 2 sheet: all 8 slots used (in this order)
+export const TIER2_POOL = ["attack", "heal", "armor", "concentration", "sweep", "fireball", "poison", "bomb"];
+// Tier 3 sheet: first 3 slots used (in this order)
+export const TIER3_POOL = ["attack", "sweep", "fireball"];
+
+// For convenience, index lookups:
+const FRAME_INDEX = {
+  1: Object.fromEntries(TIER1_POOL.map((k, i) => [k, i])),
+  2: Object.fromEntries(TIER2_POOL.map((k, i) => [k, i])),
+  3: Object.fromEntries(TIER3_POOL.map((k, i) => [k, i])),
+};
+
+// ---------- Sheet URLs (public/art) ----------
+const SHEET_URL = {
   1: "/art/Tier1Spells.png",
   2: "/art/Tier2Spells.png",
   3: "/art/Tier3Spells.png",
 };
 
-// ===== Names/Descriptions (EXPORTED) =====
-export const SPELLS = {
-  attack: {
-    name: "Attack",
-    desc: "Deal direct damage to an enemy.",
-    tier: 1,
-  },
-  heal: {
-    name: "Heal",
-    desc: "Restore health to an ally.",
-    tier: 1,
-  },
-  armor: {
-    name: "Armor",
-    desc: "Gain temporary protection that blocks damage.",
-    tier: 1,
-  },
-  sweep: {
-    name: "Sweep",
-    desc: "Damage multiple foes at once.",
-    tier: 1,
-  },
-  fireball: {
-    name: "Fireball",
-    desc: "Ignites a target with burning damage (ignores armor at higher tiers).",
-    tier: 1,
-  },
-  concentration: {
-    name: "Concentration",
-    desc: "Double the next spell’s effect; can stack if rolled multiple times before casting.",
-    tier: 2,
-  },
-  poison: {
-    name: "Poison",
-    desc: "Afflict a target with a poison die that deals damage over time.",
-    tier: 2,
-  },
-  bomb: {
-    name: "Bomb",
-    desc: "Give a target a bomb die that may explode for heavy damage or pass to another.",
-    tier: 2,
-  },
-};
-
-// ===== Flexible Sprite Info Helper (EXPORTED) =====
-// Works with either:
-//   getSpellSpriteInfo(2, "fireball")
-//   getSpellSpriteInfo({ tier: 2, type: "fireball" })
-export function getSpellSpriteInfo(spellOrTier, maybeKey) {
-  let tier, key;
-  if (typeof spellOrTier === "object" && spellOrTier) {
-    tier = spellOrTier.tier;
-    key = String(spellOrTier.type || "").toLowerCase();
-  } else {
-    tier = spellOrTier;
-    key = String(maybeKey || "").toLowerCase();
-  }
-
-  const t = Number(tier) || 1;
-  const k = key || "attack";
+// ---------- Helper: get sheet + frame for a spell object ----------
+// Expects a spell object like { type: 'attack', tier: 1 }.
+// Returns { sheetUrl, frame } or null if unknown.
+export function getSpellSpriteInfo(spell) {
+  if (!spell || !spell.type) return null;
+  const tier = clampTier(spell.tier ?? 1);
+  const key = String(spell.type).toLowerCase();
 
   const frame =
-    SPELL_FRAMES[t] && Number.isFinite(SPELL_FRAMES[t][k])
-      ? SPELL_FRAMES[t][k]
+    (FRAME_INDEX[tier] && FRAME_INDEX[tier][key] !== undefined)
+      ? FRAME_INDEX[tier][key]
       : 0;
 
-  const sheetUrl = SHEETS[t] || SHEETS[1];
+  const sheetUrl = SHEET_URL[tier] || SHEET_URL[1];
   return { sheetUrl, frame };
 }
 
-// ===== Attach Default Spell Pools to Player (EXPORTED) =====
-export function attachDefaultPoolsToPlayer(player) {
-  const t1 = Object.keys(SPELL_FRAMES[1]);
-  const t2 = Object.keys(SPELL_FRAMES[2]);
-
-  // Randomly pick 3 T1 (player will choose 2)
-  player.t1Options = shuffle(t1)
-    .slice(0, 3)
-    .map((k) => ({ type: k, tier: 1, name: SPELLS[k]?.name || k }));
-
-  // Randomly pick 2 T2 (player will choose 1)
-  player.t2Options = shuffle(t2)
-    .slice(0, 2)
-    .map((k) => ({ type: k, tier: 2, name: SPELLS[k]?.name || k }));
-
-  if (!Array.isArray(player.spells)) player.spells = [null, null, null, null];
-}
-
-// ===== Utility =====
-function shuffle(arr) {
-  return arr
-    .map((v) => ({ sort: Math.random(), value: v }))
-    .sort((a, b) => a.sort - b.sort)
-    .map((o) => o.value);
+function clampTier(t) {
+  if (t <= 1) return 1;
+  if (t === 2) return 2;
+  return 3;
 }
