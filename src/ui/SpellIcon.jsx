@@ -1,107 +1,72 @@
 import React from "react";
+import T1 from "../assets/art/Tier1Spells.png";
+import T2 from "../assets/art/Tier2Spells.png";
+import T3 from "../assets/art/Tier3Spells.png";
+import UPG from "../assets/art/UpgradeLogo.png";
 
-// All spell sheets are 500×3000 (8 rows x 1 col)
-const SPRITE_W = 500;
-const SPRITE_H = 3000;
-const ROWS = 8;
-const ROW_H = SPRITE_H / ROWS;
-
-// Indices per tier (rows, top→down)
+// Sprite indices (1×8 vertical, first N used per your notes)
 const SPELL_INDEX = {
-  1: { attack: 0, heal: 1, armor: 2, sweep: 3, fireball: 4 }, // first 5 used
+  1: { attack: 0, heal: 1, armor: 2, sweep: 3, fireball: 4 },
   2: { attack: 0, heal: 1, armor: 2, concentration: 3, sweep: 4, fireball: 5, poison: 6, bomb: 7 },
-  3: { attack: 0, sweep: 1, fireball: 2 },                     // first 3 used
+  3: { attack: 0, sweep: 1, fireball: 2 },
 };
+
+const SHEET_BY_TIER = { 1: T1, 2: T2, 3: T3 };
 
 export default function SpellIcon({
   tier,
   name,
-  size = 100,
+  size = 100,       // width in px
   radius = 10,
-  upgrade = false,
-  style,
+  upgrade = false,  // if true, show the upgrade wrench (1×1)
+  debug = false,
 }) {
-  const base = (import.meta?.env?.BASE_URL ?? "/").replace(/\/+$/, "");
-  const upgradeSrc = `${base}/art/UpgradeLogo.png`;
+  const viewW = Math.round(size);
+  const viewH = Math.round(size * 0.75);
 
-  // Blank / placeholder tile
-  if (!name || name === "blank") {
-    return (
-      <div
-        style={{
-          width: size,
-          height: Math.round(size * (ROW_H / SPRITE_W)),
-          borderRadius: radius,
-          background: "rgba(255,255,255,.05)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)",
-          ...style,
-        }}
-        title="Blank"
-      />
-    );
-  }
+  const styleBase = {
+    width: `${viewW}px`,
+    height: `${viewH}px`,
+    borderRadius: `${radius}px`,
+    backgroundRepeat: "no-repeat",
+    imageRendering: "pixelated",
+  };
 
-  // Upgrade tile
   if (upgrade) {
     return (
       <div
         style={{
-          width: size,
-          height: Math.round(size * (ROW_H / SPRITE_W)),
-          borderRadius: radius,
-          backgroundImage: `url("${upgradeSrc}")`,
-          backgroundSize: `${SPRITE_W}px ${SPRITE_H}px`,
-          backgroundPosition: `0px 0px`,
-          backgroundRepeat: "no-repeat",
-          backgroundColor: "rgba(255,255,255,.06)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)",
-          ...style,
+          ...styleBase,
+          backgroundImage: `url(${UPG})`,
+          backgroundSize: `${viewW}px ${viewH}px`,
+          backgroundPosition: `0 0`,
         }}
-        title="Upgrade"
+        aria-label="upgrade"
       />
     );
   }
 
-  const index = SPELL_INDEX[tier]?.[name];
-  const sheetPath =
-    tier === 1 ? `${base}/art/Tier1Spells.png` :
-    tier === 2 ? `${base}/art/Tier2Spells.png` :
-    `${base}/art/Tier3Spells.png`;
+  const src = SHEET_BY_TIER[tier];
+  const idx = SPELL_INDEX[tier]?.[name] ?? 0;
+  const rows = 8;
 
-  // Fallback if index unknown or sheet missing
-  if (index == null) {
-    return (
-      <div
-        style={{
-          width: size,
-          height: Math.round(size * (ROW_H / SPRITE_W)),
-          borderRadius: radius,
-          background: "rgba(255,255,255,.05)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)",
-          ...style,
-        }}
-        title={`${name || "?"} (T${tier})`}
-      />
-    );
+  const bgW = viewW;
+  const bgH = viewH * rows;
+  const offsetY = -idx * viewH;
+
+  if (debug) {
+    console.log("[SpellIcon]", { tier, name, idx, viewW, viewH, bgW, bgH, offsetY });
   }
-
-  const bgY = -index * ROW_H;
 
   return (
     <div
       style={{
-        width: size,
-        height: Math.round(size * (ROW_H / SPRITE_W)), // 4:3
-        borderRadius: radius,
-        backgroundImage: `url("${sheetPath}")`,
-        backgroundSize: `${SPRITE_W}px ${SPRITE_H}px`,
-        backgroundPosition: `0px ${bgY}px`,
-        backgroundRepeat: "no-repeat",
-        backgroundColor: "rgba(255,255,255,.06)",
-        boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)",
-        ...style,
+        ...styleBase,
+        backgroundImage: `url(${src})`,
+        backgroundSize: `${bgW}px ${bgH}px`,
+        backgroundPosition: `0px ${offsetY}px`,
       }}
-      title={`${name} (T${tier})`}
+      aria-label={`${name}-t${tier}`}
     />
   );
 }

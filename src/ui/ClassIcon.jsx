@@ -1,47 +1,52 @@
 import React from "react";
+import CLASS_LOGOS from "../assets/art/class-logos.png";
 
-// class-logos.png is 500×3000 (8 rows x 1 col)
-const SPRITE_W = 500;
-const SPRITE_H = 3000;
-const ROWS = 8;
-const ROW_H = SPRITE_H / ROWS;
-
-// Map class -> row index
+/**
+ * Renders a single frame from a 1×8 vertical sprite (each frame 500×375).
+ * Uses inline width/height so parents can’t shrink it.
+ */
 const CLASS_INDEX = {
-  thief: 0, judge: 1, tank: 2, vampire: 3,
-  king: 4, lich: 5, paladin: 6, barbarian: 7,
+  thief: 0,
+  judge: 1,
+  tank: 2,
+  vampire: 3,
+  king: 4,
+  lich: 5,
+  paladin: 6,
+  barbarian: 7,
 };
 
 export default function ClassIcon({
-  classId,
   name,
-  size = 100,
-  radius = 8,
-  style,
+  size = 80,         // width in px
+  radius = 10,
+  debug = false,
 }) {
-  const key = (classId || name || "thief").toLowerCase();
-  const idx = CLASS_INDEX[key] ?? 0;
-  const bgY = -idx * ROW_H;
+  const index = CLASS_INDEX[name] ?? 0;
 
-  // Use Vite base for correct path even when served from subfolder
-  const base = (import.meta?.env?.BASE_URL ?? "/").replace(/\/+$/, "");
-  const src = `${base}/art/class-logos.png`;
+  // Maintain 500×375 aspect → 4:3
+  const viewW = Math.round(size);
+  const viewH = Math.round(size * 0.75);
 
-  return (
-    <div
-      style={{
-        width: size,
-        height: Math.round(size * (ROW_H / SPRITE_W)), // keep 4:3 aspect (500:375)
-        borderRadius: radius,
-        backgroundImage: `url("${src}")`,
-        backgroundSize: `${SPRITE_W}px ${SPRITE_H}px`,
-        backgroundPosition: `0px ${bgY}px`,
-        backgroundRepeat: "no-repeat",
-        backgroundColor: "rgba(255,255,255,.06)", // visible even if image missing
-        boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)",
-        ...style,
-      }}
-      title={key}
-    />
-  );
+  // Background sheet scaled to our view width; total height = 8 rows
+  const bgW = viewW;
+  const bgH = viewH * 8;
+  const offsetY = -index * viewH;
+
+  const style = {
+    width: `${viewW}px`,
+    height: `${viewH}px`,
+    borderRadius: `${radius}px`,
+    backgroundImage: `url(${CLASS_LOGOS})`,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: `${bgW}px ${bgH}px`,
+    backgroundPosition: `0px ${offsetY}px`,
+    imageRendering: "pixelated",
+  };
+
+  if (debug) {
+    console.log("[ClassIcon]", { name, index, viewW, viewH, bgW, bgH, offsetY });
+  }
+
+  return <div style={style} aria-label={name} />;
 }

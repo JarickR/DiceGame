@@ -1,273 +1,233 @@
 ﻿// src/engine.js
 
+// ---- Face categories your UI can rely on ----
+export const FACE_TYPES = {
+  CLASS:   "class",   // class/emblem face (proc the class ability)
+  SPELL:   "spell",   // a concrete spell face
+  UPGRADE: "upgrade", // upgrade/wrench face
+  BLANK:   "blank",   // empty slot (can be upgraded)
+};
+
+// Small utility: roll a d20 (handy for initiative etc.)
+export function rollD20() {
+  return Math.floor(Math.random() * 20) + 1;
+}
+
+/**
+ * isPhysical(spellOrName)
+ * Returns true if the spell should be reduced by armor (physical damage).
+ * We treat "attack", "sweep", and "bomb" as physical.
+ * Fireball & Poison bypass armor (handled elsewhere).
+ *
+ * Accepts a string ("attack") or a spell object ({ name: "attack" }).
+ */
+export function isPhysical(spellOrName) {
+  const name =
+    typeof spellOrName === "string"
+      ? spellOrName
+      : (spellOrName?.name || spellOrName?.id || spellOrName?.spell || "");
+
+  const n = String(name).toLowerCase();
+  return n === "attack" || n === "sweep" || n === "bomb";
+}
+
 export default class GameEngine {
   constructor() {
-    this.players = [];
-    this.enemies = [];
-    this.log = [];
-    this.turn = 0;
+    this.party = [];
+    this._enemies = [];
+
+    // simple event hooks the UI can override
+    this.push = (msg) => console.log("[LOG]", msg);
+    this.toast = (msg) => console.log("[TOAST]", msg);
+    this.onHeroHit = (id) => {}; // UI can flash a hero card when hit
   }
 
-  push(msg) {
-    this.log.unshift(msg);
-    if (this.log.length > 200) this.log.pop();
-  }
+  // ------- party -------
 
-  getState() {
+  buildHero(name, classId) {
     return {
-      players: JSON.parse(JSON.stringify(this.players)),
-      enemies: JSON.parse(JSON.stringify(this.enemies)),
-      log: this.log.slice(),
-      turn: this.turn,
+      id: `${classId}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      classId,
+      hp: 10,
+      maxHp: 10,
+      armor: 0,
+      // spell slots (null = blank)
+      loadout: { t1: [null, null], t2: [null] },
+      // status stacks
+      status: { poison: [], bomb: [] },
+      // initiative (can be set by UI at encounter start)
+      init: null,
     };
   }
 
-  // Build heroes from loadout
-  initFromLoadout(payload) {
-    this.players = payload.map((p) => {
-      const t1 = (p.tier1 || []).slice(0, 2);
-      while (t1.length < 2) t1.push(null);
+  // ------- enemies -------
 
-      const t2 = (p.tier2 || []).slice(0, 1);
-      while (t2.length < 1) t2.push(null);
-
-      const spells = [t1[0] ?? null, t1[1] ?? null, t2[0] ?? null, null];
-
-      return {
-        id: p.id,
-        classId: p.classId,
-        hp: 20,
-        maxHp: 20,
-        armor: 0,
-        slots: { t1, t2 },
-        dieFaces: [
-          { kind: "class", classId: p.classId },                // 0
-          { kind: "spell", tier: 1, id: spells[0] || "blank" }, // 1
-          { kind: "spell", tier: 1, id: spells[1] || "blank" }, // 2
-          { kind: "spell", tier: 2, id: spells[2] || "blank" }, // 3
-          { kind: "spell", tier: 1, id: spells[3] || "blank" }, // 4 (spare)
-          { kind: "upgrade" },                                  // 5
-        ],
-        lastRoll: null,
-      };
-    });
-
-    this.enemies = [];
-    this.turn = 0;
-    this.push(`Party created with ${this.players.length} hero(s).`);
-  }
-
-  // Simple encounter for testing armor interactions
-  startEncounter() {
-    this.turn = 1;
-    this.enemies = [
-      { id: 1, name: "Training Dummy", hp: 18, maxHp: 18, armor: 4, tier: 1 },
-    ];
-    this.push("Encounter started. A Training Dummy appears (HP 18, Armor 4).");
-  }
-
-  // D6 = 0..5
-  rollFace(playerIndex) {
-    const h = this.players[playerIndex];
-    if (!h) return null;
-    const d6 = Math.floor(Math.random() * 6);
-    const face = h.dieFaces[d6];
-    const res = { d6, face, playerId: h.id };
-    h.lastRoll = res;
-    return res;
-  }
-
-  // Armor-aware damage
-  // type: 'physical' (Attack/Sweep/Bomb) or 'ignore' (Fireball/Poison)
-  applyDamage(target, amount, type = "physical") {
-    if (!target || amount <= 0) return { dealt: 0, absorbed: 0 };
-
-    if (type === "ignore") {
-      const dealt = Math.min(amount, target.hp);
-      target.hp -= dealt;
-      return { dealt, absorbed: 0 };
-    }
-
-    let remaining = amount;
-    let absorbed = 0;
-
-    if (target.armor > 0) {
-      const soak = Math.min(target.armor, remaining);
-      target.armor -= soak;
-      absorbed += soak;
-      remaining -= soak;
-    }
-
-    const dealt = Math.min(remaining, target.hp);
-    target.hp -= dealt;
-    return { dealt, absorbed };
-  }
-
-  // Resolve result (UI handles upgrade slot selection and offered spell)
-  resolveRoll(playerIndex, result, onRequestUpgrade) {
-    const h = this.players[playerIndex];
-    if (!h || !result) return;
-
-    const f = result.face;
-    if (f.kind === "class") {
-      this.push(`Hero ${h.id} used class ability: ${h.classId}.`);
-      return;
-    }
-
-    if (f.kind === "upgrade") {
-      // Ask UI which slot to upgrade; UI will then propose a random next-tier spell
-      if (onRequestUpgrade) onRequestUpgrade(playerIndex);
-      this.push(`Hero ${h.id} rolled Upgrade — select a spell slot to improve.`);
-      return;
-    }
-
-    if (f.kind !== "spell") return;
-
-    const name = f.id;
-    const tier = f.tier || 1;
-
-    if (name === "blank") {
-      this.push(`Hero ${h.id} rolled a blank face.`);
-      return;
-    }
-
-    const numbers = {
-      attack: { 1: 2, 2: 4, 3: 6 },
-      sweep: { 1: 1, 2: 2, 3: 4 },
-      fireball: { 1: 1, 2: 3, 3: 5 },
-      heal: { 1: 1, 2: 3, 3: 0 },
-      armor: { 1: 2, 2: 6, 3: 0 },
-      bomb: { 2: 6 }, // bomb only defined at T2 in the manual
+  /**
+   * Spawn an enemy. Pass { id, name, tier, armor, ai, spriteId }
+   * - spriteId: 1..20 index into the tier sheet you’re using
+   * - ai: "melee" | "caster" | "boss"
+   */
+  spawnEnemy(e) {
+    const base = {
+      hp: 12,
+      armor: 0,
+      tier: 1,
+      ai: "melee",
+      status: { poison: [], bomb: [] },
+      spriteId: 1, // 1..20
+      init: null,
     };
+    const foe = { ...base, ...e };
+    this._enemies.push(foe);
+    this.push(`Enemy spawned: ${foe.name} (T${foe.tier})`);
+    return foe;
+  }
 
-    const firstEnemy = this.enemies[0] || null;
+  clearEnemies() {
+    this._enemies = [];
+    this.push("Enemies cleared.");
+  }
 
-    switch (name) {
-      case "armor": {
-        const gain = numbers.armor[tier] || 0;
-        h.armor = Math.max(0, h.armor + gain);
-        this.push(`Hero ${h.id} gains ${gain} Armor (now ${h.armor}).`);
-        break;
-      }
+  // ------- helpers -------
 
-      case "heal": {
-        const gain = numbers.heal[tier] || 0;
-        const before = h.hp;
-        h.hp = Math.min(h.maxHp, h.hp + gain);
-        const actual = h.hp - before;
-        this.push(`Hero ${h.id} heals ${actual} HP (now ${h.hp}/${h.maxHp}).`);
-        break;
-      }
+  _aliveHeroes() {
+    return this.party.filter((h) => h.hp > 0);
+  }
+  _aliveEnemies() {
+    return this._enemies.filter((e) => e.hp > 0);
+  }
 
-      case "attack": {
-        const dmg = numbers.attack[tier] || 0;
-        if (!firstEnemy) {
-          this.push(`Hero ${h.id} strikes (no target).`);
-          break;
+  _pickTargetHero() {
+    const alive = this._aliveHeroes();
+    if (alive.length === 0) return null;
+    // bias to lowest HP sometimes
+    const sorted = [...alive].sort((a, b) => a.hp - b.hp);
+    return Math.random() < 0.6
+      ? sorted[0]
+      : alive[Math.floor(Math.random() * alive.length)];
+  }
+
+  // ------- status processing (PSN/BMB) -------
+
+  /**
+   * Apply start-of-turn status for both sides:
+   *  - Poison: deals 1 per stack ignoring armor, 1/6 chance to shed 1 stack
+   *  - Bomb:   consume 1 stack; 2/3 pass to a random foe, else explode for 3 physical
+   * Call once at the start of the enemy phase (and/or hero phase if desired).
+   */
+  _processStatusesAtTurnStart() {
+    // enemies
+    for (const e of this._aliveEnemies()) {
+      // POISON on enemy
+      if (e.status?.poison?.length) {
+        const stacks = e.status.poison.length;
+        e.hp = Math.max(0, (e.hp || 0) - stacks); // ignore armor
+        this.push(`${e.name} suffers ${stacks} PSN.`);
+        if (Math.random() < 1 / 6) {
+          e.status.poison.pop();
+          this.push(`${e.name} resists 1 PSN stack.`);
         }
-        const { dealt, absorbed } = this.applyDamage(firstEnemy, dmg, "physical");
-        this.push(
-          `Hero ${h.id} attacks for ${dmg}. Armor absorbed ${absorbed}, ${dealt} HP dealt. ` +
-          `${firstEnemy.name}: HP ${firstEnemy.hp}/${firstEnemy.maxHp}, Armor ${firstEnemy.armor}.`
-        );
-        this._checkEnemyDeath(firstEnemy);
-        break;
       }
-
-      case "sweep": {
-        const dmg = numbers.sweep[tier] || 0;
-        if (!this.enemies.length) {
-          this.push(`Hero ${h.id} sweeps (no targets).`);
-          break;
+      // BOMB on enemy
+      if (e.status?.bomb?.length) {
+        e.status.bomb.pop(); // consume one stack each start
+        if (Math.random() < 2 / 3) {
+          // pass to hero
+          const h = this._pickTargetHero();
+          if (h) {
+            h.status.bomb = h.status.bomb || [];
+            h.status.bomb.push({ stacks: 1 });
+            this.push(`${e.name} passes BMB to ${h.name}.`);
+          }
+        } else {
+          // explode on self (physical 3)
+          const dmg = 3;
+          const taken = Math.max(0, dmg - (e.armor || 0));
+          e.hp = Math.max(0, (e.hp || 0) - taken);
+          this.push(`BMB explodes on ${e.name} for ${taken}.`);
         }
-        let totalDealt = 0, totalAbs = 0;
-        for (const e of this.enemies) {
-          const { dealt, absorbed } = this.applyDamage(e, dmg, "physical");
-          totalDealt += dealt; totalAbs += absorbed;
-          this._checkEnemyDeath(e);
+      }
+    }
+
+    // heroes
+    for (const h of this._aliveHeroes()) {
+      if (h.status?.poison?.length) {
+        const stacks = h.status.poison.length;
+        h.hp = Math.max(0, (h.hp || 0) - stacks); // ignore armor
+        this.push(`${h.name} suffers ${stacks} PSN.`);
+        if (Math.random() < 1 / 6) {
+          h.status.poison.pop();
+          this.push(`${h.name} resists 1 PSN stack.`);
         }
-        this.push(
-          `Hero ${h.id} uses Sweep (${dmg} each). Armor absorbed ${totalAbs}, total ${totalDealt} HP dealt.`
-        );
-        break;
       }
-
-      case "fireball": {
-        const dmg = numbers.fireball[tier] || 0;
-        if (!firstEnemy) {
-          this.push(`Hero ${h.id} casts Fireball (no target).`);
-          break;
+      if (h.status?.bomb?.length) {
+        h.status.bomb.pop();
+        if (Math.random() < 2 / 3) {
+          // pass to a random enemy
+          const foes = this._aliveEnemies();
+          if (foes.length) {
+            const e = foes[Math.floor(Math.random() * foes.length)];
+            e.status.bomb = e.status.bomb || [];
+            e.status.bomb.push({ stacks: 1 });
+            this.push(`${h.name} passes BMB to ${e.name}.`);
+          }
+        } else {
+          // explode on hero (physical 3)
+          const dmg = 3;
+          const taken = Math.max(0, dmg - (h.armor || 0));
+          h.hp = Math.max(0, (h.hp || 0) - taken);
+          this.push(`BMB explodes on ${h.name} for ${taken}.`);
+          this.onHeroHit?.(h.id);
         }
-        this.applyDamage(firstEnemy, dmg, "ignore");
-        this.push(
-          `Hero ${h.id} casts Fireball for ${dmg} (ignores armor). ` +
-          `${firstEnemy.name}: HP ${firstEnemy.hp}/${firstEnemy.maxHp}, Armor ${firstEnemy.armor}.`
-        );
-        this._checkEnemyDeath(firstEnemy);
-        break;
-      }
-
-      case "poison": {
-        if (!firstEnemy) {
-          this.push(`Hero ${h.id} applies Poison (no target).`);
-          break;
-        }
-        this.applyDamage(firstEnemy, 1, "ignore");
-        this.push(
-          `Hero ${h.id} applies Poison (ignores armor): 1 dmg. ` +
-          `${firstEnemy.name}: HP ${firstEnemy.hp}/${firstEnemy.maxHp}.`
-        );
-        this._checkEnemyDeath(firstEnemy);
-        break;
-      }
-
-      case "bomb": {
-        const dmg = numbers.bomb[tier] || 0;
-        if (!firstEnemy) {
-          this.push(`Hero ${h.id} throws a Bomb (no target).`);
-          break;
-        }
-        const { dealt, absorbed } = this.applyDamage(firstEnemy, dmg, "physical");
-        this.push(
-          `Hero ${h.id} throws a Bomb for ${dmg}. Armor absorbed ${absorbed}, ${dealt} HP dealt. ` +
-          `${firstEnemy.name}: HP ${firstEnemy.hp}/${firstEnemy.maxHp}, Armor ${firstEnemy.armor}.`
-        );
-        this._checkEnemyDeath(firstEnemy);
-        break;
-      }
-
-      case "concentration": {
-        this.push(`Hero ${h.id} rolls Concentration — next spell effect doubles (hook later).`);
-        break;
-      }
-
-      default: {
-        this.push(`Hero ${h.id} used ${name} (T${tier}).`);
       }
     }
   }
 
-  _checkEnemyDeath(e) {
-    if (e.hp <= 0) {
-      this.push(`${e.name} is defeated!`);
-      this.enemies = this.enemies.filter((x) => x.id !== e.id);
-    }
-  }
+  // ------- very simple enemy AI -------
 
-  // UI-driven upgrade commit
-  commitUpgrade(playerIndex, slotIndex, acceptNew, newSpell) {
-    const h = this.players[playerIndex];
-    if (!h) return;
-    if (slotIndex < 1 || slotIndex > 4) return;
+  _enemyAttack(e) {
+    const target = this._pickTargetHero();
+    if (!target) return;
 
-    const old = h.dieFaces[slotIndex];
-    if (!old || old.kind !== "spell") return;
-
-    if (acceptNew && newSpell && newSpell.id !== "blank") {
-      h.dieFaces[slotIndex] = { kind: "spell", tier: newSpell.tier, id: newSpell.id };
-      this.push(`Hero ${h.id} upgraded slot ${slotIndex} to ${newSpell.id} (T${newSpell.tier}).`);
+    if (e.ai === "caster") {
+      // Ignores armor (fireball-like)
+      const dmg = e.tier >= 2 ? 3 : 2;
+      target.hp = Math.max(0, (target.hp || 0) - dmg);
+      this.push(
+        `${e.name} scorches ${target.name} for ${dmg} (ignores armor).`
+      );
+      this.onHeroHit?.(target.id);
+    } else if (e.ai === "boss") {
+      const dmg = 4;
+      const taken = Math.max(0, dmg - (target.armor || 0));
+      target.hp = Math.max(0, (target.hp || 0) - taken);
+      this.push(`${e.name} smashes ${target.name} for ${taken}.`);
+      this.onHeroHit?.(target.id);
     } else {
-      this.push(`Hero ${h.id} kept the old spell in slot ${slotIndex}.`);
+      // melee default (physical)
+      const dmg = e.tier >= 2 ? 3 : 2;
+      const taken = Math.max(0, dmg - (target.armor || 0));
+      target.hp = Math.max(0, (target.hp || 0) - taken);
+      this.push(`${e.name} hits ${target.name} for ${taken}.`);
+      this.onHeroHit?.(target.id);
+    }
+  }
+
+  async enemyTurn() {
+    // status processing first (PSN/BMB ticks & passes)
+    this._processStatusesAtTurnStart();
+
+    const foes = this._aliveEnemies();
+    if (foes.length === 0) {
+      this.push("No enemies to act.");
+      return;
+    }
+
+    for (const e of foes) {
+      await new Promise((r) => setTimeout(r, 300)); // small pacing for UI
+      if (e.hp <= 0) continue;
+      this._enemyAttack(e);
     }
   }
 }
