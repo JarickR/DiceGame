@@ -1,0 +1,27 @@
+.se-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.se-item {
+  background: #0f141c;
+  border: 1px solid #223048;
+  border-radius: 8px;
+  padding: 4px 6px;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 4px;
+  align-items: center;
+  color: #e8ecf1;
+}
+
+.se-count {
+  opacity: 0.9;
+  margin-left: 2px;
+}
+
+.se-num {
+  font-weight: 700;
+}

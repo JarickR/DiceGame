@@ -1,115 +1,86 @@
-// src/data/enemies.js
-// Enemy DB + helpers for grid-based sprite sheets.
-// Sheet grids (confirmed by your images):
-// - Tier 1: 10 columns x 2 rows  (index 0..19 left->right, top->bottom)
-// - Tier 2: 5 columns  x 4 rows  (index 0..19)
-// - Boss  : 4 columns  x 5 rows  (index 0..19)
+// Central registry for enemies, including sprite "index" in your 5x4 sheets.
+// You can extend HP/Armor/AI here freely.
 
-export const SHEET_META = {
-  T1: { src: "/art/Tier1.png", cols: 10, rows: 2 },
-  T2: { src: "/art/Tier2.png", cols: 5, rows: 4 },
-  BOSS: { src: "/art/Boss.png", cols: 4, rows: 5 },
-};
-
-// A few lightweight target rules the engine can use.
-export const TARGET_RULE = {
-  LOWEST_ARMOR: "lowestArmor",
-  HIGHEST_HP: "highestHp",
-  LOWEST_HP: "lowestHp",
-  RANDOM: "random",
-  NEAREST: "nearest",     // (if you later add positions)
-};
-
-// ---- Tier 1 (id 1..20) ----
 export const TIER1_ENEMIES = [
-  { id: 1,  name: "Cowardly Goblin",    tier: 1, spriteIndex: 0,  ai: TARGET_RULE.LOWEST_ARMOR, hp: 6,  armor: 1, dmg: 2 },
-  { id: 2,  name: "Pack Hunter Rat",    tier: 1, spriteIndex: 1,  ai: TARGET_RULE.NEAREST,      hp: 5,  armor: 0, dmg: 2 },
-  { id: 3,  name: "Thick-Hide Beetle",  tier: 1, spriteIndex: 2,  ai: TARGET_RULE.HIGHEST_HP,   hp: 7,  armor: 2, dmg: 2 },
-  { id: 4,  name: "Unstable Slime",     tier: 1, spriteIndex: 3,  ai: TARGET_RULE.RANDOM,       hp: 4,  armor: 0, dmg: 1 },
-  { id: 5,  name: "Distracting Imp",    tier: 1, spriteIndex: 4,  ai: TARGET_RULE.RANDOM,       hp: 6,  armor: 1, dmg: 2 },
-  { id: 6,  name: "Quickstep Gremlin",  tier: 1, spriteIndex: 5,  ai: TARGET_RULE.NEAREST,      hp: 5,  armor: 1, dmg: 2 },
-  { id: 7,  name: "Torchling",          tier: 1, spriteIndex: 6,  ai: TARGET_RULE.HIGHEST_HP,   hp: 5,  armor: 0, dmg: 2 },
-  { id: 8,  name: "Rust Rat",           tier: 1, spriteIndex: 7,  ai: TARGET_RULE.RANDOM,       hp: 4,  armor: 0, dmg: 2 },
-  { id: 9,  name: "Cave Flea",          tier: 1, spriteIndex: 8,  ai: TARGET_RULE.RANDOM,       hp: 3,  armor: 1, dmg: 2 },
-  { id: 10, name: "Lantern Ghoul",      tier: 1, spriteIndex: 9,  ai: TARGET_RULE.LOWEST_HP,    hp: 6,  armor: 0, dmg: 2 },
-  { id: 11, name: "Thorn Crawler",      tier: 1, spriteIndex: 10, ai: TARGET_RULE.RANDOM,       hp: 5,  armor: 2, dmg: 2 },
-  { id: 12, name: "Dust Imp",           tier: 1, spriteIndex: 11, ai: TARGET_RULE.RANDOM,       hp: 4,  armor: 0, dmg: 1 },
-  { id: 13, name: "Moss Goblin",        tier: 1, spriteIndex: 12, ai: TARGET_RULE.NEAREST,      hp: 7,  armor: 1, dmg: 2 },
-  { id: 14, name: "Bone Pecker",        tier: 1, spriteIndex: 13, ai: TARGET_RULE.HIGHEST_HP,   hp: 5,  armor: 1, dmg: 2 },
-  { id: 15, name: "Grime Slug",         tier: 1, spriteIndex: 14, ai: TARGET_RULE.RANDOM,       hp: 6,  armor: 0, dmg: 1 },
-  { id: 16, name: "Tunnel Snapper",     tier: 1, spriteIndex: 15, ai: TARGET_RULE.NEAREST,      hp: 6,  armor: 2, dmg: 2 },
-  { id: 17, name: "Scorch Bug",         tier: 1, spriteIndex: 16, ai: TARGET_RULE.RANDOM,       hp: 3,  armor: 0, dmg: 2 },
-  { id: 18, name: "Cinder Rat",         tier: 1, spriteIndex: 17, ai: TARGET_RULE.LOWEST_ARMOR, hp: 4,  armor: 0, dmg: 2 },
-  { id: 19, name: "Drip Slime",         tier: 1, spriteIndex: 18, ai: TARGET_RULE.NEAREST,      hp: 4,  armor: 0, dmg: 1 },
-  { id: 20, name: "Stone Beetle",       tier: 1, spriteIndex: 19, ai: TARGET_RULE.HIGHEST_HP,   hp: 6,  armor: 2, dmg: 2 },
+  { key: "goblin",          name: "Goblin",          index: 0,  hp: 10, armor: 0 },
+  { key: "pack_rat",        name: "Pack Hunter Rat", index: 1,  hp: 9,  armor: 0 },
+  { key: "thick_beetle",    name: "Thick-Hide Beetle", index: 2, hp: 11, armor: 2 },
+  { key: "unstable_slime",  name: "Unstable Slime",  index: 3,  hp: 8,  armor: 0 },
+  { key: "distracting_imp", name: "Distracting Imp", index: 4,  hp: 9,  armor: 1 },
+
+  { key: "quickstep",   name: "Quickstep Gremlin", index: 5,  hp: 10, armor: 1 },
+  { key: "torchling",   name: "Torchling",         index: 6,  hp: 9,  armor: 0 },
+  { key: "rust_rat",    name: "Rust Rat",          index: 7,  hp: 8,  armor: 0 },
+  { key: "cave_flea",   name: "Cave Flea",         index: 8,  hp: 7,  armor: 1 },
+  { key: "lantern_ghoul", name: "Lantern Ghoul",   index: 9,  hp: 10, armor: 0 },
+
+  { key: "thorn_crawler", name: "Thorn Crawler",   index: 10, hp: 9,  armor: 2 },
+  { key: "dust_imp",     name: "Dust Imp",         index: 11, hp: 8,  armor: 0 },
+  { key: "moss_goblin",  name: "Moss Goblin",      index: 12, hp: 9,  armor: 1 },
+  { key: "bone_pecker",  name: "Bone Pecker",      index: 13, hp: 8,  armor: 0 },
+  { key: "grime_slug",   name: "Grime Slug",       index: 14, hp: 10, armor: 1 },
+
+  { key: "tunnel_snapper", name: "Tunnel Snapper", index: 15, hp: 11, armor: 2 },
+  { key: "scorch_bug",     name: "Scorch Bug",     index: 16, hp: 8,  armor: 0 },
+  { key: "cinder_rat",     name: "Cinder Rat",     index: 17, hp: 9,  armor: 0 },
+  { key: "drip_slime",     name: "Drip Slime",     index: 18, hp: 8,  armor: 0 },
+  { key: "stone_beetle",   name: "Stone Beetle",   index: 19, hp: 12, armor: 2 },
 ];
 
-// ---- Tier 2 (id 1..20) ----
 export const TIER2_ENEMIES = [
-  { id: 1,  name: "Savage Orc",         tier: 2, spriteIndex: 0,  ai: TARGET_RULE.HIGHEST_HP,   hp: 10, armor: 2, dmg: 4 },
-  { id: 2,  name: "Vampire Acolyte",    tier: 2, spriteIndex: 1,  ai: TARGET_RULE.LOWEST_HP,    hp: 9,  armor: 1, dmg: 4 },
-  { id: 3,  name: "Dark Warden",        tier: 2, spriteIndex: 2,  ai: TARGET_RULE.LOWEST_HP,    hp: 12, armor: 3, dmg: 4 },
-  { id: 4,  name: "Blight Spitter",     tier: 2, spriteIndex: 3,  ai: TARGET_RULE.LOWEST_ARMOR, hp: 8,  armor: 1, dmg: 4 },
-  { id: 5,  name: "Ghost Knight",       tier: 2, spriteIndex: 4,  ai: TARGET_RULE.RANDOM,       hp: 11, armor: 0, dmg: 4 },
-  { id: 6,  name: "Storm Caller",       tier: 2, spriteIndex: 5,  ai: TARGET_RULE.RANDOM,       hp: 9,  armor: 1, dmg: 4 },
-  { id: 7,  name: "Flame Revenant",     tier: 2, spriteIndex: 6,  ai: TARGET_RULE.HIGHEST_HP,   hp: 12, armor: 1, dmg: 4 },
-  { id: 8,  name: "Abyss Crawler",      tier: 2, spriteIndex: 7,  ai: TARGET_RULE.LOWEST_HP,    hp: 14, armor: 2, dmg: 4 },
-  { id: 9,  name: "Rotting Brute",      tier: 2, spriteIndex: 8,  ai: TARGET_RULE.LOWEST_HP,    hp: 16, armor: 1, dmg: 4 },
-  { id: 10, name: "Crystal Knight",     tier: 2, spriteIndex: 9,  ai: TARGET_RULE.MOST_UPGRADED, hp: 15, armor: 3, dmg: 4 }, // if you add later
-  { id: 11, name: "Frost Warg",         tier: 2, spriteIndex: 10, ai: TARGET_RULE.NEAREST,      hp: 12, armor: 2, dmg: 4 },
-  { id: 12, name: "Vile Totem",         tier: 2, spriteIndex: 11, ai: TARGET_RULE.SUPPORT,      hp: 10, armor: 0, dmg: 0 },
-  { id: 13, name: "Iron Husk",          tier: 2, spriteIndex: 12, ai: TARGET_RULE.TAUNT,        hp: 18, armor: 4, dmg: 4 },
-  { id: 14, name: "Blood Spider",       tier: 2, spriteIndex: 13, ai: TARGET_RULE.LOWEST_HP,    hp: 12, armor: 2, dmg: 4 },
-  { id: 15, name: "Sand Revenant",      tier: 2, spriteIndex: 14, ai: TARGET_RULE.RANDOM,       hp: 13, armor: 1, dmg: 4 },
-  { id: 16, name: "Cursed Archer",      tier: 2, spriteIndex: 15, ai: TARGET_RULE.FARTHEST,     hp: 11, armor: 1, dmg: 4 },
-  { id: 17, name: "Runed Bear",         tier: 2, spriteIndex: 16, ai: TARGET_RULE.TANK,         hp: 17, armor: 3, dmg: 4 },
-  { id: 18, name: "Blistering Myconid", tier: 2, spriteIndex: 17, ai: TARGET_RULE.HIGHEST_HP,   hp: 10, armor: 0, dmg: 4 },
-  { id: 19, name: "Marrow Fiend",       tier: 2, spriteIndex: 18, ai: TARGET_RULE.LOWEST_ARMOR, hp: 15, armor: 2, dmg: 4 },
-  { id: 20, name: "Wicked Collector",   tier: 2, spriteIndex: 19, ai: TARGET_RULE.MOST_UPGRADED, hp: 12, armor: 2, dmg: 4 },
+  { key: "savage_orc",       name: "Savage Orc",       index: 0,  hp: 12, armor: 1 },
+  { key: "vampire_acolyte",  name: "Vampire Acolyte",  index: 1,  hp: 11, armor: 1 },
+  { key: "dark_warden",      name: "Dark Warden",      index: 2,  hp: 14, armor: 3 },
+  { key: "blight_spitter",   name: "Blight Spitter",   index: 3,  hp: 10, armor: 1 },
+  { key: "ghost_knight",     name: "Ghost Knight",     index: 4,  hp: 12, armor: 4 },
+
+  { key: "storm_caller",     name: "Storm Caller",     index: 5,  hp: 11, armor: 0 },
+  { key: "flame_revenant",   name: "Flame Revenant",   index: 6,  hp: 12, armor: 1 },
+  { key: "abyss_crawler",    name: "Abyss Crawler",    index: 7,  hp: 14, armor: 2 },
+  { key: "rotting_brute",    name: "Rotting Brute",    index: 8,  hp: 16, armor: 1 },
+  { key: "crystal_knight",   name: "Crystal Knight",   index: 9,  hp: 15, armor: 3 },
+
+  { key: "frost_warg",       name: "Frost Warg",       index: 10, hp: 13, armor: 1 },
+  { key: "vile_totem",       name: "Vile Totem",       index: 11, hp: 10, armor: 0 },
+  { key: "iron_husk",        name: "Iron Husk",        index: 12, hp: 18, armor: 4 },
+  { key: "blood_spider",     name: "Blood Spider",     index: 13, hp: 12, armor: 2 },
+  { key: "sand_revenant",    name: "Sand Revenant",    index: 14, hp: 13, armor: 3 },
+
+  { key: "cursed_archer",    name: "Cursed Archer",    index: 15, hp: 11, armor: 1 },
+  { key: "runed_bear",       name: "Runed Bear",       index: 16, hp: 17, armor: 3 },
+  { key: "blistering_myconid", name: "Blistering Myconid", index: 17, hp: 10, armor: 1 },
+  { key: "marrow_fiend",     name: "Marrow Fiend",     index: 18, hp: 15, armor: 2 },
+  { key: "wicked_collector", name: "Wicked Collector", index: 19, hp: 12, armor: 3 },
 ];
 
-// ---- Bosses (id 1..20) ----
 export const BOSS_ENEMIES = [
-  { id: 1,  name: "Lich King Var’Zhul",     tier: 3, spriteIndex: 0,  ai: TARGET_RULE.LOWEST_ARMOR, hp: 25, armor: 3, dmg: 6 },
-  { id: 2,  name: "Infernal Bombardier",    tier: 3, spriteIndex: 1,  ai: TARGET_RULE.MIDDLE,       hp: 30, armor: 2, dmg: 5 },
-  { id: 3,  name: "Titan Stonefist",        tier: 3, spriteIndex: 2,  ai: TARGET_RULE.HIGHEST_ARMOR, hp: 40, armor: 5, dmg: 6 },
-  { id: 4,  name: "Queen of Shadows",       tier: 3, spriteIndex: 3,  ai: TARGET_RULE.LOWEST_HP,    hp: 28, armor: 1, dmg: 3 },
-  { id: 5,  name: "The Maw",                tier: 3, spriteIndex: 4,  ai: TARGET_RULE.LOWEST_HP,    hp: 35, armor: 2, dmg: 6 },
-  { id: 6,  name: "Arcane Reactor",         tier: 3, spriteIndex: 5,  ai: TARGET_RULE.SPLIT,        hp: 20, armor: 0, dmg: 8 },
-  { id: 7,  name: "Eclipse Warden",         tier: 3, spriteIndex: 6,  ai: TARGET_RULE.MOST_ACTIVE,  hp: 36, armor: 3, dmg: 7 },
-  { id: 8,  name: "Blightroot",             tier: 3, spriteIndex: 7,  ai: TARGET_RULE.MULTI,        hp: 26, armor: 2, dmg: 6 },
-  { id: 9,  name: "Gravelord Varn",         tier: 3, spriteIndex: 8,  ai: TARGET_RULE.LOWEST_HP,    hp: 42, armor: 4, dmg: 6 },
-  { id: 10, name: "The Hungering Rift",     tier: 3, spriteIndex: 9,  ai: TARGET_RULE.RANDOM,       hp: 30, armor: 0, dmg: 6 },
-  { id: 11, name: "Ashen Titan",            tier: 3, spriteIndex: 10, ai: TARGET_RULE.HIGHEST_ARMOR, hp: 45, armor: 5, dmg: 6 },
-  { id: 12, name: "Mirror Shade",           tier: 3, spriteIndex: 11, ai: TARGET_RULE.MIMIC,        hp: 33, armor: 1, dmg: 4 },
-  { id: 13, name: "Serpent Queen Xiilix",   tier: 3, spriteIndex: 12, ai: TARGET_RULE.HIGHEST_HP,   hp: 38, armor: 2, dmg: 5 },
-  { id: 14, name: "Clockwork Anomaly",      tier: 3, spriteIndex: 13, ai: TARGET_RULE.PATTERN,      hp: 35, armor: 3, dmg: 6 },
-  { id: 15, name: "Storm Herald",           tier: 3, spriteIndex: 14, ai: TARGET_RULE.FARTHEST,     hp: 39, armor: 2, dmg: 7 },
-  { id: 16, name: "Iron Widow",             tier: 3, spriteIndex: 15, ai: TARGET_RULE.BIND,         hp: 34, armor: 3, dmg: 6 },
-  { id: 17, name: "Dread Siren",            tier: 3, spriteIndex: 16, ai: TARGET_RULE.CHARM,        hp: 32, armor: 2, dmg: 6 },
-  { id: 18, name: "Ember King",             tier: 3, spriteIndex: 17, ai: TARGET_RULE.BURN,         hp: 44, armor: 2, dmg: 8 },
-  { id: 19, name: "Vault Guardian",         tier: 3, spriteIndex: 18, ai: TARGET_RULE.TANK,         hp: 46, armor: 5, dmg: 6 },
-  { id: 20, name: "Oracle of Rust",         tier: 3, spriteIndex: 19, ai: TARGET_RULE.DECAY,        hp: 36, armor: 3, dmg: 5 },
+  { key: "lich_king",     name: "Lich King Var’Zhul", index: 0,  hp: 25, armor: 3 },
+  { key: "bombardier",    name: "Infernal Bombardier", index: 1, hp: 30, armor: 2 },
+  { key: "titan_stonefist",name: "Titan Stonefist",    index: 2,  hp: 40, armor: 5 },
+  { key: "queen_shadows", name: "Queen of Shadows",   index: 3,  hp: 28, armor: 1 },
+  { key: "the_maw",       name: "The Maw",            index: 4,  hp: 35, armor: 2 },
+
+  { key: "arcane_reactor", name: "Arcane Reactor",    index: 5,  hp: 20, armor: 0 },
+  { key: "eclipse_warden", name: "Eclipse Warden",    index: 6,  hp: 36, armor: 3 },
+  { key: "blightroot",     name: "Blightroot",        index: 7,  hp: 30, armor: 2 },
+  { key: "gravelord_varn", name: "Gravelord Varn",    index: 8,  hp: 42, armor: 4 },
+  { key: "hungering_rift", name: "The Hungering Rift",index: 9,  hp: 30, armor: 0 },
+
+  { key: "ashen_titan",    name: "Ashen Titan",       index: 10, hp: 45, armor: 5 },
+  { key: "mirror_shade",   name: "Mirror Shade",      index: 11, hp: 33, armor: 1 },
+  { key: "serpent_queen",  name: "Serpent Queen Xilix", index: 12, hp: 38, armor: 2 },
+  { key: "clockwork_anomaly", name: "Clockwork Anomaly", index: 13, hp: 35, armor: 3 },
+  { key: "storm_herald",   name: "Storm Herald",      index: 14, hp: 39, armor: 2 },
+
+  { key: "iron_widow",     name: "Iron Widow",        index: 15, hp: 34, armor: 3 },
+  { key: "dread_siren",    name: "Dread Siren",       index: 16, hp: 32, armor: 2 },
+  { key: "ember_king",     name: "Ember King",        index: 17, hp: 44, armor: 2 },
+  { key: "vault_guardian", name: "Vault Guardian",    index: 18, hp: 46, armor: 5 },
+  { key: "oracle_rust",    name: "Oracle of Rust",    index: 19, hp: 36, armor: 3 },
 ];
 
-// Convenience getters
-
-export function getEnemyByTierAndId(tier, id) {
-  if (tier === 1) return TIER1_ENEMIES.find(e => e.id === id) || null;
-  if (tier === 2) return TIER2_ENEMIES.find(e => e.id === id) || null;
-  return BOSS_ENEMIES.find(e => e.id === id) || null;
-}
-
-export function getSpriteSheetMetaForTier(tier) {
-  if (tier === 1) return SHEET_META.T1;
-  if (tier === 2) return SHEET_META.T2;
-  return SHEET_META.BOSS;
-}
-
-// Returns { src, cols, rows, index } for rendering
-export function getEnemySpriteInfo(tier, id) {
-  const e = getEnemyByTierAndId(tier, id);
-  if (!e) return null;
-  const meta = getSpriteSheetMetaForTier(tier);
-  return { src: meta.src, cols: meta.cols, rows: meta.rows, index: e.spriteIndex };
+// Quick lookup by key + tier
+export function getEnemyByKey(tier, key) {
+  const pool = tier === 1 ? TIER1_ENEMIES : tier === 2 ? TIER2_ENEMIES : BOSS_ENEMIES;
+  return pool.find((e) => e.key === key) || null;
 }

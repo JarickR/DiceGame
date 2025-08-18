@@ -1,21 +1,24 @@
+// src/ui/UpgradeIcon.jsx
 import React from "react";
-import SpriteThumb from "./SpriteThumb";
+import UPG from "../assets/art/UpgradeLogo.png"; // ensure this file exists
 
-// Single-frame upgrade logo (500×375 per your assets)
-const UPGRADE_SRC = "/art/UpgradeLogo.png";
-
-export default function UpgradeIcon({ size = 80, radius = 10 }) {
+export default function UpgradeIcon({
+  size = 80,
+  radius = 10,
+  alt = "Upgrade",
+}) {
   return (
-    <SpriteThumb
-      src={UPGRADE_SRC}
-      index={0}
-      cols={1}
-      rows={1}
-      frameW={500}
-      frameH={375}
-      viewW={size}
-      viewH={(size * 3) / 5}
-      radius={radius}
+    <div
+      aria-label={alt}
+      title={alt}
+      style={{
+        width: size,
+        height: Math.round((size * 3) / 5), // match 500×375 aspect visuals
+        borderRadius: radius,
+        overflow: "hidden",
+        background: `#0b0f15 url(${UPG}) center/contain no-repeat`,
+        outline: "1px solid #1e2530",
+      }}
     />
   );
 }
