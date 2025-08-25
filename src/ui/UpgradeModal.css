@@ -1,0 +1,106 @@
+/* src/ui/UpgradeModal.css */
+
+.umodal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .55);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.umodal-container {
+  background: #0f1319;
+  border: 1px solid #1e2631;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  padding: 16px;
+  width: min(720px, calc(100vw - 32px));
+  color: #e8eef6;
+}
+
+.umodal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.umodal-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.umodal-subtitle {
+  opacity: .85;
+  margin-bottom: 10px;
+}
+
+.upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.upgrade-slot {
+  width: 140px;
+  height: 170px;
+  border-radius: 12px;
+  background: #121821;
+  border: 1px solid #1f2733;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #e8eef6;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+
+.upgrade-slot:hover {
+  transform: translateY(-2px);
+  border-color: #d6b25f;
+  box-shadow: 0 0 0 2px rgba(214,178,95,.35) inset, 0 8px 24px rgba(0,0,0,.35);
+}
+
+.upgrade-slot.blank {
+  background: #151a23;
+  opacity: .9;
+}
+
+.slot-art {
+  width: 100px;
+  height: 100px;
+  display: grid;
+  place-items: center;
+}
+
+.blank-chip {
+  width: 96px;
+  height: 64px;
+  border-radius: 10px;
+  background: #242c39;
+  border: 1px dashed #3a4556;
+  color: #b7c2d2;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+}
+
+.slot-label {
+  font-size: 12px;
+  opacity: .85;
+}
+
+/* tiny button compatibility */
+.btn.btn-small {
+  background: #1a2130;
+  border: 1px solid #2a3446;
+  color: #e8eef6;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.btn.btn-small:hover { border-color: #3f4f69; }

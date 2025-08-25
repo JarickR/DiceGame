@@ -1,6 +1,6 @@
 // src/ui/EnemyCard.jsx
 import React from "react";
-import EnemyIcon from "../ui/EnemyIcon.jsx";                 // kept separate
+import EnemyIcon from "./EnemyIcon";                 // kept separate
 import StatusEffects from "../components/StatusEffects"; // stacks UI (PSN/BMB)
 
 /**
