@@ -1,80 +1,65 @@
 import React from "react";
 import SpriteThumb from "./SpriteThumb";
 
-// Each tier sheet is now 1×6 vertical, 500×500 per frame
-import TIER1 from "../assets/art/Tier1Spells.png";
-import TIER2 from "../assets/art/Tier2Spells.png";
-import TIER3 from "../assets/art/Tier3Spells.png";
+// All are 1×8 vertical sheets; each frame 500×500
+import T1 from "../assets/art/Tier1Spells.png";
+import T2 from "../assets/art/Tier2Spells.png";
+import T3 from "../assets/art/Tier3Spells.png";
 
-/**
- * Expected spell shape (flexible):
- * - { tier: 'T1'|'T2'|'T3', index: number }
- * or legacy:
- * - { name: 'attack'|'heal'|..., tier: 1|2|3 }  -> we map to index via INDEX_MAP below
- */
+const SHEET_BY_TIER = { 1: T1, 2: T2, 3: T3 };
 
-const SHEETS = {
-  T1: { src: TIER1, rows: 6 },
-  T2: { src: TIER2, rows: 6 },
-  T3: { src: TIER3, rows: 6 },
-};
-
-// If your engine uses name-based spells, adjust these maps:
-const INDEX_MAP = {
-  T1: { attack: 0, heal: 1, armor: 2, sweep: 3, fireball: 4, blank: 5 },
-  T2: {
+// Indices per your sheets (top → bottom = 0..7)
+const INDEX = {
+  1: {
+    attack: 0,
+    heal: 1,
+    armor: 2,
+    sweep: 3,
+    fireball: 4,
+    // 5–7 unused/blank
+  },
+  2: {
     attack: 0,
     heal: 1,
     armor: 2,
     concentration: 3,
     sweep: 4,
-    fireball: 5, // use 5 if your T2 has bomb/poison elsewhere; edit if needed
+    fireball: 5,
+    poison: 6,
+    bomb: 7,
   },
-  T3: { attack: 0, sweep: 1, fireball: 2, blank: 5 },
+  3: {
+    attack: 0,
+    sweep: 1,
+    fireball: 2,
+    // 3–7 blank
+  },
 };
 
-function toTierKey(t) {
-  if (t === 1 || t === "1") return "T1";
-  if (t === 2 || t === "2") return "T2";
-  if (t === 3 || t === "3") return "T3";
-  return typeof t === "string" && /^T[123]$/.test(t) ? t : "T1";
-}
-
 export default function SpellIcon({
-  spell,
-  size = 80,
+  tier = 1,
+  name = "attack",
+  size = 96,
   radius = 10,
-  debug = false,
+  style,
 }) {
-  if (!spell) return null;
-
-  const tierKey =
-    spell.tier && typeof spell.tier !== "undefined"
-      ? toTierKey(spell.tier)
-      : "T1";
-
-  const { src, rows } = SHEETS[tierKey];
-
-  let index = 0;
-  if (typeof spell.index === "number") {
-    index = spell.index;
-  } else if (spell.name) {
-    const map = INDEX_MAP[tierKey] || {};
-    index = map[spell.name] ?? 0;
-  }
+  const sheet = SHEET_BY_TIER[tier];
+  const index = (INDEX[tier] && INDEX[tier][name] !== undefined)
+    ? INDEX[tier][name]
+    : 0;
 
   return (
     <SpriteThumb
-      src={src}
+      src={sheet}
       index={index}
       frameW={500}
       frameH={500}
-      rows={rows}
+      rows={8}
       cols={1}
-      viewW={size}
-      viewH={size}
+      size={size}
       radius={radius}
-      debug={debug}
+      style={style}
+      title={`${name} (T${tier})`}
     />
   );
 }

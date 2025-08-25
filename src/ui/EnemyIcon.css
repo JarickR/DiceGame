@@ -1,42 +1,30 @@
-.enemy-icon {
-  display: inline-block;
-  background-repeat: no-repeat;
-  background-size: cover;
-  border: 2px solid transparent;
-  box-sizing: border-box;
-  image-rendering: pixelated;
-}
+import React from "react";
+import SpriteThumb from "./SpriteThumb";
+import Tier1 from "../assets/art/Tier1Enemies.png";
+import Tier2 from "../assets/art/Tier2Enemies.png";
+import Boss from "../assets/art/BossEnemies.png";
 
-.enemy-thumb {
-  grid-area: thumb;
-  background-repeat: no-repeat;
-  image-rendering: pixelated;
-  border-radius: 10px;
-  border: 1px solid #1f2a3a;
-}
+const SHEETS = {
+  1: Tier1,
+  2: Tier2,
+  boss: Boss,
+};
 
-.enemy-meta {
-  grid-area: meta;
-}
+export default function EnemyIcon({ tier = 1, index = 0, size = 80, radius = 10, debug = false }) {
+  const sheet = SHEETS[tier] ?? Tier1;
 
-.enemy-title {
-  font-weight: 700;
-  margin-bottom: 4px;
+  return (
+    <SpriteThumb
+      src={sheet}
+      index={index}
+      frameW={500}
+      frameH={500}
+      rows={5}
+      cols={4}
+      viewW={size}
+      viewH={size}
+      radius={radius}
+      debug={debug}
+    />
+  );
 }
-
-.enemy-stats {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.btn-attack {
-  grid-area: btn;
-  align-self: end;
-  background: #1d3b8f;
-  border: 1px solid #2a4db5;
-  color: #e8ecf1;
-  padding: 6px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.btn-attack:hover { filter: brightness(1.1); }
