@@ -1,27 +1,26 @@
-.se-wrap {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 6px;
+.status-effects {
+  line-height: 1;
 }
 
-.se-item {
-  background: #0f141c;
-  border: 1px solid #223048;
-  border-radius: 8px;
-  padding: 4px 6px;
+.status-item {
   display: grid;
-  grid-template-columns: auto auto auto;
-  gap: 4px;
-  align-items: center;
-  color: #e8ecf1;
+  grid-template-rows: auto 1fr;
+  justify-items: center;
 }
 
-.se-count {
-  opacity: 0.9;
-  margin-left: 2px;
+.status-count {
+  margin-top: 2px;
+  font-weight: 800;
+  font-size: 12px;   /* black number BELOW icon */
+  color: #000;
+  user-select: none;
 }
 
-.se-num {
-  font-weight: 700;
+/* flat look; keep colors simple and readable */
+.status-poison {
+  /* label not shown (number only), style here if needed */
+}
+
+.status-bomb {
+  /* label not shown (number only), style here if needed */
 }

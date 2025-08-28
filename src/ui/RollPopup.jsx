@@ -1,160 +1,216 @@
 // src/ui/RollPopup.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ClassIcon from "./ClassIcon";
 import SpellIcon from "./SpellIcon";
-import UpgradeIcon from "./UpgradeIcon";
 
-// One clean spin
-const ROLL_SPIN_TOTAL_MS = 420;
-const ROLL_SPIN_FRAME_MS = 40;
-const ROLL_HOLD_MS       = 600;
+/**
+ * Props:
+ *  - face: {kind:'class'|'spell'|'blank'|'upgrade', ...} | null
+ *  - version: number  // bump this number to restart the animation
+ *  - onClose: () => void
+ *
+ * Behavior:
+ *  - When version changes, we run a short "spin" cycle then reveal the face.
+ *  - Auto closes ~1.6s after the spin starts (or when user clicks OK).
+ */
+export default function RollPopup({ face, version = 0, onClose }) {
+  const [spinning, setSpinning] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const spinTimerRef = useRef(null);
+  const closeTimerRef = useRef(null);
+  const spinnerTickRef = useRef(null);
+  const [tick, setTick] = useState(0); // for the little spinner shim
 
-// Sprite frames are 500x375 => height = 0.75 * width
-const FRAME_ASPECT = 375 / 500; // 0.75
-
-export default function RollPopup({ faces, landingIndex = 0, onDone }) {
-  const spinFaces = useMemo(() => {
-    if (!Array.isArray(faces) || faces.length !== 6) {
-      const blank = { kind: "upgrade" };
-      return [blank, blank, blank, blank, blank, blank];
-    }
-    return faces;
-  }, [faces]);
-
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [landed, setLanded] = useState(false);
-  const timerRef = useRef(null);
-  const startedRef = useRef(false);
-
+  // Restart animation every time `version` changes (and when a face is present)
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+    // cleanup any prior timers
+    clearTimers();
 
-    let cancelled = false;
-    const frames = Math.max(8, Math.floor(ROLL_SPIN_TOTAL_MS / ROLL_SPIN_FRAME_MS));
-    let f = 0;
+    if (!face) return;
 
-    const tick = () => {
-      if (cancelled) return;
-      setCurrentIdx((p) => (p + 1) % spinFaces.length);
-      f += 1;
-      if (f < frames) {
-        timerRef.current = setTimeout(tick, ROLL_SPIN_FRAME_MS);
-      } else {
-        const li = landingIndex % spinFaces.length;
-        setCurrentIdx(li);
-        setLanded(true);
-        timerRef.current = setTimeout(() => {
-          if (!cancelled) onDone?.(spinFaces[li]);
-        }, ROLL_HOLD_MS);
-      }
-    };
+    // start a new cycle
+    setShowResult(false);
+    setSpinning(true);
 
-    timerRef.current = setTimeout(tick, ROLL_SPIN_FRAME_MS);
+    // tiny spinner loop
+    spinnerTickRef.current = setInterval(() => {
+      setTick((t) => (t + 1) % 6);
+    }, 60);
 
-    return () => {
-      cancelled = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [spinFaces, landingIndex, onDone]);
+    // after ~900ms, reveal the result
+    spinTimerRef.current = setTimeout(() => {
+      setSpinning(false);
+      setShowResult(true);
+    }, 900);
 
-  const face = spinFaces[currentIdx];
+    // after ~1600ms total, auto-close
+    closeTimerRef.current = setTimeout(() => {
+      if (onClose) onClose();
+    }, 1600);
+
+    return clearTimers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, face?.kind]); // re-run when version changes (or face type changes)
+
+  const clearTimers = () => {
+    if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    if (spinnerTickRef.current) clearInterval(spinnerTickRef.current);
+    spinTimerRef.current = null;
+    closeTimerRef.current = null;
+    spinnerTickRef.current = null;
+  };
+
+  if (!face) return null;
+
+  // Simple spinner visuals (you can replace with whatever)
+  const spinnerDot = ".".repeat((tick % 3) + 1);
+
+  const renderFace = () => {
+    if (spinning) {
+      return (
+        <div
+          style={{
+            width: 160,
+            height: 120,
+            borderRadius: 14,
+            background: "rgba(255,255,255,.06)",
+            border: "1px dashed rgba(255,255,255,.18)",
+            display: "grid",
+            placeItems: "center",
+            fontWeight: 800,
+            color: "rgba(255,255,255,.8)",
+          }}
+        >
+          Spinning{spinnerDot}
+        </div>
+      );
+    }
+
+    // Final result (face)
+    const card = (
+      <div
+        style={{
+          width: 160,
+          height: 120,
+          borderRadius: 14,
+          display: "grid",
+          placeItems: "center",
+          background: "rgba(255,255,255,.06)",
+          border: "1px solid rgba(255,255,255,.12)",
+          boxShadow: showResult
+            ? "0 0 0 4px rgba(255, 215, 0, .45), 0 0 24px rgba(255,215,0,.25)"
+            : "none",
+          transition: "box-shadow 180ms ease",
+        }}
+      >
+        {face.kind === "class" && (
+          <ClassIcon name={face.classId} size={84} radius={12} />
+        )}
+        {face.kind === "spell" && (
+          <SpellIcon tier={face.spell.tier} name={face.spell.name} size={84} radius={12} />
+        )}
+        {face.kind === "upgrade" && (
+          <SpellIcon upgrade size={84} radius={12} />
+        )}
+        {face.kind === "blank" && (
+          <div
+            style={{
+              width: 84,
+              height: 84,
+              borderRadius: 12,
+              border: "2px dashed rgba(255,255,255,.25)",
+              display: "grid",
+              placeItems: "center",
+              color: "rgba(255,255,255,.7)",
+              fontWeight: 800,
+            }}
+          >
+            Blank
+          </div>
+        )}
+      </div>
+    );
+
+    return card;
+  };
 
   return (
-    <div style={styles.backdrop}>
-      <div style={styles.card}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>Rolling…</div>
-        <FaceTile face={face} landed={landed} />
-        <div style={{ marginTop: 10, opacity: 0.75, fontSize: 12 }}>
-          {landed ? "Result!" : "Spinning…"}
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.35)",
+        display: "grid",
+        placeItems: "center",
+        zIndex: 9999,
+      }}
+      onClick={(e) => {
+        // click outside to close
+        if (e.target === e.currentTarget && onClose) onClose();
+      }}
+    >
+      <div
+        style={{
+          width: 520,
+          maxWidth: "calc(100vw - 24px)",
+          borderRadius: 16,
+          border: "1px solid rgba(255,255,255,.12)",
+          background: "rgba(18,18,22,.96)",
+          color: "#fff",
+          boxShadow: "0 10px 30px rgba(0,0,0,.45)",
+          padding: 18,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 20,
+            fontWeight: 900,
+            marginBottom: 12,
+          }}
+        >
+          Rolling…
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+            borderRadius: 12,
+            background: "rgba(255,255,255,.04)",
+            border: "1px solid rgba(255,255,255,.08)",
+            minHeight: 150,
+          }}
+        >
+          {renderFace()}
+        </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => onClose && onClose()}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,.2)",
+              background: "#2563eb",
+              color: "#fff",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            OK
+          </button>
         </div>
       </div>
     </div>
   );
 }
-
-function FaceTile({ face, landed }) {
-  const width = 104;                  // a bit bigger than before but still compact
-  const height = Math.round(width * FRAME_ASPECT);
-  const radius = 12;
-
-  return (
-    <div
-      style={{
-        position: "relative",
-        width,
-        height,
-        borderRadius: radius,
-        background: "rgba(255,255,255,.02)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        outline: "1px solid #1e2530",
-        padding: 4,                // small cushion so nothing touches edges
-        boxSizing: "border-box",
-      }}
-    >
-      {/* Content */}
-      <FaceRenderer face={face} size={width - 8} radius={radius - 2} />
-
-      {/* Gold highlight overlay when landed */}
-      {landed && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: radius,
-            boxShadow:
-              "0 0 0 3px rgba(255,200,60,1), 0 0 22px rgba(255,200,60,.5), inset 0 0 10px rgba(255,200,60,.25)",
-            pointerEvents: "none",
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function FaceRenderer({ face, size, radius }) {
-  if (!face) return null;
-
-  if (face.kind === "class") {
-    const className = face.className || "thief";
-    return <ClassIcon name={className} size={size} radius={radius} />;
-  }
-  if (face.kind === "upgrade") {
-    return <UpgradeIcon size={size} radius={radius} />;
-  }
-  if (face.kind === "spell") {
-    return (
-      <SpellIcon
-        tier={face.tier || 1}
-        name={face.name || "attack"}
-        size={size}
-        radius={radius}
-      />
-    );
-  }
-  return <UpgradeIcon size={size} radius={radius} />;
-}
-
-const styles = {
-  backdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.35)",
-    display: "grid",
-    placeItems: "center",
-    zIndex: 9999,
-  },
-  card: {
-    background: "#0f141c",
-    color: "#eaf0f6",
-    border: "1px solid #263042",
-    borderRadius: 16,
-    padding: 16,
-    minWidth: 220,
-    display: "grid",
-    justifyItems: "center",
-    boxShadow: "0 18px 60px rgba(0,0,0,.45)",
-  },
-};

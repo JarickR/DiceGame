@@ -20,6 +20,19 @@ export const SPELLS = {
   3: [...TIER3_POOL],
 };
 
+// Classes in display order for the loadout row
+export const CLASS_ORDER = [
+  "thief",
+  "judge",
+  "tank",
+  "vampire",
+  "king",
+  "lich",
+  "paladin",
+  "barbarian",
+];
+
+
 // ───────────────────────────────────────────────────────────────────────────────
 // Sprite indices per tier (vertical sheets: 500×3000, 1 col × 8 rows)
 // Rows are top→down from 0..7. Only the listed ones are used.

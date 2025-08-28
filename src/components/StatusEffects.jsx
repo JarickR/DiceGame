@@ -1,20 +1,28 @@
 import React from "react";
-import "./StatusEffects.css";
-
-// Flat PNGs you provided (500×500), we scale them down in CSS
 import PoisonIcon from "../assets/art/PoisonIcon.png";
 import BombIcon from "../assets/art/BombIcon.png";
 
-export default function StatusEffects({ poison = 0, bomb = 0 }) {
+export default function StatusEffects({ psn = 0, bmb = 0 }) {
   return (
-    <div className="status-effects">
-      <div className="status-icon">
-        <img src={PoisonIcon} alt="Poison" />
-        <span className="status-count">PSN {poison}</span>
-      </div>
-      <div className="status-icon">
-        <img src={BombIcon} alt="Bomb" />
-        <span className="status-count">BMB {bomb}</span>
+    <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+      <Stack icon={PoisonIcon} label="PSN" value={psn} />
+      <Stack icon={BombIcon} label="BMB" value={bmb} />
+    </div>
+  );
+}
+
+function Stack({ icon, label, value }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <img
+        src={icon}
+        alt={label}
+        width={22}
+        height={22}
+        style={{ imageRendering: "pixelated" }}
+      />
+      <div style={{ fontSize: 12 }}>
+        {label} <b>{value}</b>
       </div>
     </div>
   );

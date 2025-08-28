@@ -14,6 +14,27 @@ export function isPhysical(spellName) {
   return ["attack", "sweep", "bomb"].includes(String(spellName));
 }
 
+// --- Dice helpers (safe to paste into engine.js) -----------------------------
+
+/** Return a random integer in [0, n).  Allows custom RNG for tests. */
+export function randInt(n, rng = Math.random) {
+  return Math.floor(rng() * n);
+}
+
+/**
+ * rollFace(faces, rng?)
+ * - faces: array of 6 items (or any length) representing the die faces.
+ * - returns the selected face object/value.
+ */
+export function rollFace(faces, rng = Math.random) {
+  if (!faces || !faces.length) {
+    throw new Error("rollFace: faces array is empty or undefined");
+  }
+  const i = randInt(faces.length, rng);
+  return faces[i];
+}
+
+
 // Simple RNG helpers
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 

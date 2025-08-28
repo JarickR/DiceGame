@@ -1,231 +1,255 @@
-// src/ui/LoadoutScreen.jsx
 import React, { useMemo, useState } from "react";
 import ClassIcon from "./ClassIcon";
 import SpellIcon from "./SpellIcon";
+import { TIER1_POOL, TIER2_POOL } from "../spells";
 
-// Spells available by tier for the loadout picker (matches engine pools)
-const T1_POOL = ["attack", "heal", "armor", "sweep", "fireball"];
-const T2_POOL = ["attack", "heal", "armor", "concentration", "sweep", "fireball", "poison", "bomb"];
-
-// Class tooltips (keep short; shows in native "title" tooltip)
-const CLASS_INFO = {
-  thief:     "Steal turn face & become Invisible this turn.",
-  judge:     "Reroll your die twice, keep any effect.",
-  tank:      "+3 Armor while visible. Taunt. 2 Thorn.",
-  vampire:   "Permanently steal 2 HP, ignoring armor.",
-  king:      "Deal 2 dmg, heal 1, gain 2 armor.",
-  lich:      "Summon a Ghoul die; re-rolls on attack.",
-  paladin:   "Restore 2 HP; while visible you can't lose HP.",
-  barbarian: "Lose 1 HP; reroll and your result gets +2.",
-};
-
-// util
-function sampleDistinct(arr, n, rand) {
-  const out = [];
-  const used = new Set();
-  while (out.length < n && used.size < arr.length) {
-    const i = (rand() * arr.length) | 0;
-    if (!used.has(i)) { used.add(i); out.push(arr[i]); }
-  }
-  return out;
-}
-
+/**
+ * Props:
+ * - partySize: number
+ * - t1Max: 2 | 3
+ * - t2Max: 1 | 2
+ * - onFinalize(loadouts): (loadoutsPerPlayer) => void
+ * - classList: string[]
+ */
 export default function LoadoutScreen({
-  rng = Math.random,
-  maxPlayers = 8,
-  onFinalize, // (listOfHeroesSpec) => void
+  partySize,
+  t1Max,
+  t2Max,
+  onFinalize,
+  classList,
 }) {
-  // party size
-  const [partySize, setPartySize] = useState(2);
-
-  // each "draft" hero stores selections before we build real engine heroes
-  const emptyHero = () => ({
-    classId: null,
-    t1Options: sampleDistinct(T1_POOL, 3, rng),
-    t2Options: sampleDistinct(T2_POOL, 2, rng),
-    pickT1: [], // up to 2 names
-    pickT2: null, // single name
-  });
-
-  const [drafts, setDrafts] = useState(() =>
-    Array.from({ length: partySize }, emptyHero)
+  // Selected class per player
+  const [classes, setClasses] = useState(
+    Array.from({ length: partySize }, () => classList[0] || "thief")
   );
 
-  // when party size changes, regenerate drafts (fresh random options)
-  function applyPartySize(n) {
-    const size = Math.max(1, Math.min(maxPlayers, n | 0));
-    setPartySize(size);
-    setDrafts(Array.from({ length: size }, emptyHero));
-  }
+  // Randomized choices per player (3 from T1, 2 from T2)
+  const randomChoices = useMemo(() => {
+    return Array.from({ length: partySize }, () => ({
+      t1: sampleUniqueByName(TIER1_POOL, 3),
+      t2: sampleUniqueByName(TIER2_POOL, 2),
+    }));
+  }, [partySize]);
 
-  function setClass(i, classId) {
-    setDrafts(d =>
-      d.map((h, idx) => idx !== i ? h : { ...h, classId })
-    );
-  }
+  // Player selections (what they’ve picked so far)
+  const [selections, setSelections] = useState(
+    Array.from({ length: partySize }, () => ({ t1: [], t2: [] }))
+  );
 
-  function toggleT1(i, name) {
-    setDrafts(d =>
-      d.map((h, idx) => {
-        if (idx !== i) return h;
-        const picks = h.pickT1.includes(name)
-          ? h.pickT1.filter(x => x !== name)
-          : (h.pickT1.length < 2 ? [...h.pickT1, name] : h.pickT1);
-        return { ...h, pickT1: picks };
-      })
-    );
-  }
-  function setT2(i, name) {
-    setDrafts(d => d.map((h, idx) => idx !== i ? h : { ...h, pickT2: name }));
-  }
+  const togglePick = (playerIdx, tier, spell) => {
+    setSelections((prev) => {
+      const next = prev.map((p) => ({ t1: [...p.t1], t2: [...p.t2] }));
+      const bag = next[playerIdx][tier];
+      const max = tier === "t1" ? t1Max : t2Max;
+      const exists = bag.find((s) => s.name === spell.name);
 
-  const canFinalize = useMemo(() => {
-    // class is required; spells can be blank (we'll fill with blanks)
-    return drafts.every(h => !!h.classId);
-  }, [drafts]);
+      if (exists) {
+        // Deselect
+        next[playerIdx][tier] = bag.filter((s) => s.name !== spell.name);
+      } else {
+        if (bag.length >= max) {
+          // Replace oldest (acts like a capped radio-group)
+          bag.shift();
+        }
+        bag.push(spell);
+      }
+      return next;
+    });
+  };
 
-  function finalize() {
-    if (!canFinalize) return;
+  const finalize = () => {
+    // Build 4 slots per player: [T1, T1, T2, (T1/T2 optional based on caps)]
+    const loadouts = classes.map((cls, idx) => {
+      const chosenT1 = selections[idx].t1.slice(0, t1Max);
+      const chosenT2 = selections[idx].t2.slice(0, t2Max);
 
-    // Convert drafts into engine-ready hero specs
-    // We'll produce slots: [T1, T1, T2, T3(blank)]
-    const specs = drafts.map((h, i) => {
-      const t1a = h.pickT1[0] || null;
-      const t1b = h.pickT1[1] || null;
-      const t2  = h.pickT2     || null;
+      const slots = [null, null, null, null];
 
-      return {
-        name: `Hero ${i+1}`,
-        classId: h.classId,
-        slots: [
-          { tier:1, spell: t1a ? { id:t1a, tier:1 } : null },
-          { tier:1, spell: t1b ? { id:t1b, tier:1 } : null },
-          { tier:2, spell: t2  ? { id:t2,  tier:2 } : null },
-          { tier:3, spell: null }, // reserved; blank is allowed
-        ],
-      };
+      // Up to 2 Tier1 go into slots 0 and 1
+      for (let i = 0; i < Math.min(2, chosenT1.length); i++) {
+        slots[i] = { tier: 1, name: chosenT1[i].name };
+      }
+      // One Tier2 goes into slot 2 (if chosen)
+      if (chosenT2[0]) slots[2] = { tier: 2, name: chosenT2[0].name };
+
+      // Fourth slot rules:
+      // - If t1Max === 3 and we took 3 T1 and did not take T2, drop T1 #3 here
+      if (t1Max === 3 && chosenT1.length === 3 && !chosenT2.length) {
+        slots[3] = { tier: 1, name: chosenT1[2].name };
+      }
+      // - If t2Max === 2 and we took 2 T2, place the second T2 here
+      if (t2Max === 2 && chosenT2.length === 2) {
+        slots[3] = { tier: 2, name: chosenT2[1].name };
+      }
+
+      return { className: cls, spells: slots };
     });
 
-    onFinalize?.(specs);
-  }
+    onFinalize(loadouts);
+  };
 
-  // UI
   return (
-    <div style={{ color:"#fff" }}>
-      <h1 style={{ marginBottom:8 }}>Select Class</h1>
+    <div className="loadout-wrap" style={{ color: "white" }}>
+      {Array.from({ length: partySize }).map((_, i) => {
+        const t1opts = randomChoices[i].t1;
+        const t2opts = randomChoices[i].t2;
+        const sel = selections[i];
 
-      {/* Party size */}
-      <div style={{ margin:"10px 0 18px 0", display:"flex", alignItems:"center", gap:10 }}>
-        <label>Party size:</label>
-        <select
-          value={partySize}
-          onChange={e => applyPartySize(parseInt(e.target.value,10))}
-          style={{ background:"#0f141b", color:"#fff", border:"1px solid #344", borderRadius:8, padding:"6px 8px" }}
-        >
-          {Array.from({length:maxPlayers}, (_,i)=>i+1).map(n => <option key={n} value={n}>{n}</option>)}
-        </select>
-        <div style={{ opacity:.8, fontSize:13 }}>(random spell options refresh when you change size)</div>
-      </div>
-
-      {/* Grid of players */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(520px,1fr))", gap:14 }}>
-        {drafts.map((h, idx) => (
-          <div key={idx} style={{ background:"#0f141b", border:"1px solid #243040", borderRadius:12, padding:12 }}>
-            <div style={{ fontWeight:800, marginBottom:8 }}>Player {idx+1}</div>
-
-            {/* class row */}
-            <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:10 }}>
-              {Object.keys(CLASS_INFO).map(cls => (
-                <button
-                  key={cls}
-                  title={CLASS_INFO[cls]}
-                  onClick={() => setClass(idx, cls)}
-                  style={{
-                    borderRadius:12,
-                    border: h.classId===cls ? "2px solid #71a4ff" : "1px solid #2a3444",
-                    padding:6,
-                    background: h.classId===cls ? "rgba(80,140,255,.15)" : "#121a24"
-                  }}
-                >
-                  <ClassIcon name={cls} size={60} radius={10} />
-                </button>
-              ))}
+        return (
+          <div key={i} className="panel" style={{ marginBottom: 24 }}>
+            {/* Header: player + current class */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 10,
+              }}
+            >
+              <ClassIcon name={classes[i]} size={48} radius={10} />
+              <div style={{ fontWeight: 800 }}>{`Player ${i + 1}`}</div>
             </div>
 
-            {/* T1 options */}
-            <div style={{ marginTop:8 }}>
-              <div style={{ fontWeight:700, marginBottom:8 }}>Tier 1 — choose up to 2</div>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:10 }}>
-                {h.t1Options.map(name => {
-                  const checked = h.pickT1.includes(name);
-                  return (
-                    <label key={name} style={{
-                      display:"flex", alignItems:"center", gap:10,
-                      background:"#10202a", border:"1px solid #2e4359",
-                      borderRadius:12, padding:10
-                    }}>
-                      <SpellIcon tier={1} name={name} size={64} radius={10} />
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:700, textTransform:"capitalize" }}>{name}</div>
-                        <div style={{ fontSize:12, opacity:.75 }}>Tier 1</div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleT1(idx, name)}
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+            {/* Class selector row */}
+            <div
+              className="class-row"
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                marginBottom: 14,
+              }}
+            >
+              {classList.map((name) => {
+                const active = classes[i] === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`choice-card ${active ? "selected" : ""}`}
+                    onClick={() =>
+                      setClasses((prev) => {
+                        const next = [...prev];
+                        next[i] = name;
+                        return next;
+                      })
+                    }
+                  >
+                    <ClassIcon name={name} size={64} radius={12} />
+                    <div className="choice-title">{name}</div>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* T2 options */}
-            <div style={{ marginTop:12 }}>
-              <div style={{ fontWeight:700, marginBottom:8 }}>Tier 2 — choose 1 (optional)</div>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:10 }}>
-                {h.t2Options.map(name => {
-                  const checked = h.pickT2 === name;
-                  return (
-                    <label key={name} style={{
-                      display:"flex", alignItems:"center", gap:10,
-                      background:"#0f2138", border:"1px solid #2e4359",
-                      borderRadius:12, padding:10
-                    }}>
-                      <SpellIcon tier={2} name={name} size={64} radius={10} />
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:700, textTransform:"capitalize" }}>{name}</div>
-                        <div style={{ fontSize:12, opacity:.75 }}>Tier 2</div>
-                      </div>
-                      <input
-                        type="radio"
-                        name={`t2-${idx}`}
-                        checked={checked}
-                        onChange={() => setT2(idx, name)}
-                      />
-                    </label>
-                  );
-                })}
-              </div>
-              <div className="small" style={{ opacity:.8, marginTop:6 }}>
-                Not picking a Tier 2 is fine — the slot will be blank and can be upgraded later.
-              </div>
+            {/* Tier 1 choices */}
+            <div
+              style={{ fontWeight: 800, marginBottom: 6 }}
+            >{`Tier 1 — pick ${t1Max === 3 ? "2 or 3" : "up to 2"}`}{" "}
+              <span style={{ color: "var(--muted)" }}>
+                (picked {sel.t1.length})
+              </span>
+            </div>
+            <div
+              className="choice-row"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(160px, 1fr))",
+                gap: 14,
+                marginBottom: 14,
+              }}
+            >
+              {t1opts.map((spell) => {
+                const selected = !!sel.t1.find((s) => s.name === spell.name);
+                return (
+                  <button
+                    key={spell.name}
+                    type="button"
+                    className={`choice-card ${selected ? "selected" : ""}`}
+                    onClick={() => togglePick(i, "t1", spell)}
+                  >
+                    <SpellIcon tier={1} name={spell.name} size={72} radius={12} />
+                    <div className="choice-title">{spell.name}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tier 2 choices */}
+            <div
+              style={{ fontWeight: 800, marginBottom: 6 }}
+            >{`Tier 2 — pick ${t2Max === 2 ? "1 or 2" : "1"}`}{" "}
+              <span style={{ color: "var(--muted)" }}>
+                (picked {sel.t2.length})
+              </span>
+            </div>
+            <div
+              className="choice-row"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(160px, 1fr))",
+                gap: 14,
+              }}
+            >
+              {t2opts.map((spell) => {
+                const selected = !!sel.t2.find((s) => s.name === spell.name);
+                return (
+                  <button
+                    key={spell.name}
+                    type="button"
+                    className={`choice-card ${selected ? "selected" : ""}`}
+                    onClick={() => togglePick(i, "t2", spell)}
+                  >
+                    <SpellIcon tier={2} name={spell.name} size={72} radius={12} />
+                    <div className="choice-title">{spell.name}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
 
-      {/* Finalize */}
-      <div style={{ display:"flex", justifyContent:"flex-end", marginTop:16 }}>
-        <button
-          className="btn primary"
-          disabled={!canFinalize}
-          onClick={finalize}
-          title={!canFinalize ? "Every player must pick a class" : ""}
-        >
-          Finalize & Start
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button type="button" onClick={finalize} style={{ fontWeight: 800 }}>
+          Finalize & Continue
         </button>
       </div>
     </div>
   );
+}
+
+/* ------------------------------------------------------- */
+/* Helpers */
+/* ------------------------------------------------------- */
+
+function normalizeSpell(v) {
+  // Accept "attack" OR { name: "attack" }
+  return typeof v === "string" ? { name: v } : { name: v.name };
+}
+
+function sampleUniqueByName(pool, n) {
+  // Normalize and shuffle, then keep by name uniqueness
+  const normalized = pool.map(normalizeSpell);
+  const arr = shuffle([...normalized]);
+
+  const seen = new Set();
+  const result = [];
+  for (const item of arr) {
+    if (!seen.has(item.name)) {
+      seen.add(item.name);
+      result.push(item);
+      if (result.length === n) break;
+    }
+  }
+  // If pool was small, result might be < n — that’s OK
+  return result;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }

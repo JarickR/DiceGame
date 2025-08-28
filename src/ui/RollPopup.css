@@ -1,0 +1,82 @@
+/* src/ui/RollPopup.css */
+
+.roll-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.roll-modal {
+  width: min(640px, 90vw);
+  background: #12151a;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  padding: 16px 16px 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+.roll-header {
+  font-weight: 800;
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+
+.roll-preview {
+  height: 200px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04);
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  overflow: hidden; /* prevents cropped sprite edges */
+}
+
+/* Gold highlight once roll finishes */
+.roll-preview--final {
+  border: 2px solid #d4af37;
+  box-shadow: 0 0 0 3px rgba(212,175,55,.25), 0 8px 30px rgba(0,0,0,.4);
+}
+
+.roll-caption {
+  font-size: 14px;
+  opacity: 0.9;
+  min-height: 22px;
+  margin-bottom: 10px;
+}
+
+.roll-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn {
+  background: #2b67f6;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn:hover {
+  filter: brightness(1.05);
+}
+
+/* placeholder for blank face */
+.roll-blank-slab {
+  width: 140px;
+  height: 140px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.7);
+  font-weight: 700;
+}

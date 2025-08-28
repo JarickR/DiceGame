@@ -1,24 +1,34 @@
+// src/ui/SpellIcon.jsx
 import React from "react";
 import SpriteThumb from "./SpriteThumb";
 
-// All are 1×8 vertical sheets; each frame 500×500
-import T1 from "../assets/art/Tier1Spells.png";
-import T2 from "../assets/art/Tier2Spells.png";
-import T3 from "../assets/art/Tier3Spells.png";
+// Sheets (each tile 500x500; 1 column, N rows)
+const SHEETS = {
+  1: "/src/assets/art/Tier1Spells.png",
+  2: "/src/assets/art/Tier2Spells.png",
+  3: "/src/assets/art/Tier3Spells.png",
+};
 
-const SHEET_BY_TIER = { 1: T1, 2: T2, 3: T3 };
-
-// Indices per your sheets (top → bottom = 0..7)
-const INDEX = {
+/**
+ * Index maps by tier -> spellName -> row index
+ * (rows are 0-based; each tile 500x500; one column)
+ *
+ * Tier 1: updated to fix fireball/sweep swap.
+ * Previously we had: { attack:0, heal:1, armor:2, sweep:3, fireball:4 }
+ * Now we flip those two:
+ *   fireball -> 3
+ *   sweep    -> 4
+ */
+const SPELL_INDEX = {
   1: {
     attack: 0,
     heal: 1,
     armor: 2,
-    sweep: 3,
-    fireball: 4,
-    // 5–7 unused/blank
+    fireball: 3,  // <-- fixed
+    sweep: 4,     // <-- fixed
   },
   2: {
+    // keep your existing Tier 2 order
     attack: 0,
     heal: 1,
     armor: 2,
@@ -29,37 +39,60 @@ const INDEX = {
     bomb: 7,
   },
   3: {
+    // first 3 used on your T3 sheet
     attack: 0,
     sweep: 1,
     fireball: 2,
-    // 3–7 blank
   },
 };
 
+// Special Upgrade icon (single tile 500x500)
+const UPGRADE_SHEET = "/src/assets/art/UpgradeLogo.png";
+
 export default function SpellIcon({
-  tier = 1,
-  name = "attack",
-  size = 96,
+  tier,
+  name,
+  size = 80,     // final square width for the thumbnail
   radius = 10,
-  style,
+  upgrade = false,
+  className = "",
+  style = {},
+  title = "",
 }) {
-  const sheet = SHEET_BY_TIER[tier];
-  const index = (INDEX[tier] && INDEX[tier][name] !== undefined)
-    ? INDEX[tier][name]
-    : 0;
+  if (upgrade) {
+    return (
+      <SpriteThumb
+        src={UPGRADE_SHEET}
+        index={0}
+        frameW={500}
+        frameH={500}
+        rows={1}
+        cols={1}
+        size={size}
+        radius={radius}
+        className={className}
+        style={style}
+        title={title || "Upgrade"}
+      />
+    );
+  }
+
+  const src = SHEETS[tier];
+  const index = SPELL_INDEX[tier]?.[name] ?? 0;
 
   return (
     <SpriteThumb
-      src={sheet}
+      src={src}
       index={index}
       frameW={500}
       frameH={500}
-      rows={8}
+      rows={8}          // safe upper bound; only used rows will show
       cols={1}
       size={size}
       radius={radius}
+      className={className}
       style={style}
-      title={`${name} (T${tier})`}
+      title={title || name}
     />
   );
 }

@@ -1,37 +1,228 @@
-*{box-sizing:border-box}
-:root{--bg:#0a0d12;--card:#0f141b;--ink:#e7edf5;--muted:#a9b4c3;--line:#223043;--accent:#5ab0ff}
-html,body,#root{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-h1,h2,h3{margin:0 0 10px}
-.container{max-width:1200px;margin:0 auto;padding:20px}
-.grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
-.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
-.small{font-size:12px}.muted{color:var(--muted)}
-.bold{font-weight:700}
-.btn{background:#1b2836;color:#fff;border:1px solid #2b3a4a;border-radius:8px;padding:8px 12px;cursor:pointer}
-.btn.secondary{background:#10161d}
-.pill{display:inline-flex;background:#16202a;border:1px solid #2b3a4a;border-radius:999px;padding:2px 8px;font-size:12px}
-.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-hr{border:0;border-top:1px solid #1f2a35;margin:14px 0}
-
-/* High-contrast status badges */
-.status { position: relative; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:6px; background:#0b0d10; border:1px solid #333; }
-.status .status-count { position:absolute; right:-6px; bottom:-6px; background:#111; color:#fff; border:1px solid #444; font-size:10px; line-height:1; padding:2px 4px; border-radius:6px; }
-.status.fx-bleed { box-shadow: 0 0 0 0 rgba(255,60,60,0.85); animation: pulse-red 1.2s infinite; color:#ff3c3c; border-color:#ff3c3c; }
-.status.fx-noReroll { color:#ffd166; border-color:#ffd166; }
-.status.fx-firstReduce { color:#89a7ff; border-color:#89a7ff; animation: shield-glow 1.6s ease-in-out infinite; }
-.status.fx-untargetableUnlessLast { color:#e2e2e2; border-color:#e2e2e2; opacity:0.95; }
-.status.fx-reflect1 { color:#5ab0ff; border-color:#5ab0ff; }
-.status.fx-healBlock { color:#89eaa0; border-color:#89eaa0; filter: none; }
-.status.fx-armorShred { color:#ffb06a; border-color:#ffb06a; }
-
-@keyframes pulse-red {
-  0% { box-shadow: 0 0 0 0 rgba(255,60,60,0.7); }
-  70% { box-shadow: 0 0 0 12px rgba(255,60,60,0); }
-  100% { box-shadow: 0 0 0 0 rgba(255,60,60,0); }
+/* ==== GLOBAL (ADD/REPLACE) ==== */
+:root {
+  --bg-900: #0f141a;
+  --bg-800: #161c24;
+  --bg-700: #1c2430;
+  --panel: #0f141a;
+  --accent: #ffcc4d;
+  --border: rgba(255,255,255,0.12);
+  --muted: rgba(255,255,255,0.6);
+  --muted2: rgba(255,255,255,0.4);
+  --ok: #1aa275;
+  --blue: #0d5aa7;
+  --hit: #e05252;
 }
-@keyframes shield-glow {
-  0%,100% { box-shadow: 0 0 12px rgba(137,167,255,.35); }
-  50% { box-shadow: 0 0 18px rgba(137,167,255,.6); }
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg-900);
+  color: #fff;              /* force white text everywhere */
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6, label, p, span, div {
+  color: #fff;              /* ensure white text in all containers */
+}
+
+/* Cards/panels */
+.panel {
+  background: var(--bg-800);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+/* ====== LOADOUT ====== */
+
+/* Row that holds spell options */
+.pickRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* If your row has backgrounds/hover, this prevents it from eating clicks */
+.pickRow.click-shield {
+  pointer-events: none;
+}
+
+/* Each clickable card re-enables pointer events */
+.spellOption {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, border-color 0.1s ease;
+}
+
+.spellOption:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  border-color: rgba(255,255,255,0.25);
+}
+
+.spellOption.selected {
+  outline: 2px solid #ffd54a;     /* gold highlight */
+  box-shadow: 0 0 0 3px rgba(255,213,74,0.25);
+}
+
+.loadout-wrap {
+  display: grid;
+  gap: 20px;
+}
+
+.class-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.choice-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.choice-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  background: var(--bg-900);
+  cursor: pointer;
+}
+
+.choice-card.selected {
+  outline: 2px solid var(--accent);
+  background: #2a1f0b;
+}
+
+.choice-title {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ====== SPRITE THUMBS ====== */
+.thumb {
+  width: 84px;
+  height: 84px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--bg-700);
+  border: 1px solid var(--border);
+}
+
+.thumb-lg {
+  width: 112px;
+  height: 112px;
+  border-radius: 14px;
+}
+
+/* ====== ROLL POPUP ====== */
+.roll-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+}
+
+.roll-popup {
+  width: 420px;
+  max-width: 92vw;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--bg-800);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+}
+
+.roll-popup h3 {
+  margin: 0 0 12px;
+}
+
+.roll-face-box {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--bg-700);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.roll-face-box .thumb-lg {
+  box-shadow: 0 0 0 3px transparent;
+  transition: box-shadow 180ms ease;
+}
+
+.roll-face-box.result .thumb-lg {
+  box-shadow: 0 0 0 3px var(--accent);  /* gold border on the result */
+}
+
+/* ====== COMBAT ====== */
+.row-top, .row-bottom {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.combat-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-800);
+}
+
+.hpbar {
+  width: 100%;
+  height: 10px;
+  border-radius: 8px;
+  background: #3b2628;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.hpbar > span {
+  display: block;
+  height: 100%;
+  background: #ff6262;
+  transition: width 180ms ease;
+}
+
+/* damage flash */
+.hitflash {
+  animation: hitFlash 300ms ease;
+}
+@keyframes hitFlash {
+  0% { box-shadow: 0 0 0 0 rgba(224,82,82,0.0); }
+  30% { box-shadow: 0 0 0 6px rgba(224,82,82,0.45); }
+  100% { box-shadow: 0 0 0 0 rgba(224,82,82,0.0); }
+}
+
+/* ====== SCROLLABLE LOG ====== */
+.log {
+  background: var(--bg-800);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  height: 140px;            /* shows ~5 lines at 1.2em each */
+  overflow: auto;
+  padding: 10px 12px;
+  line-height: 1.2;
+}
+
+/* force white on controls */
+button, select, option {
+  color: #fff;
+  background: var(--bg-700);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
 }

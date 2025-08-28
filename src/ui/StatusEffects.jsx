@@ -1,55 +1,55 @@
-// src/ui/StatusEffects.jsx
 import React from "react";
 import "./StatusEffects.css";
+import StatusIcon from "../ui/StatusIcon";
 
-// Flat PNG icons you added (transparent BG)
+// single 500×500 tiles you added
 import PoisonIcon from "../assets/art/PoisonIcon.png";
 import BombIcon from "../assets/art/BombIcon.png";
 
 /**
- * Reusable status effects display (works for heroes & enemies)
+ * StatusEffects
+ * Renders small poison/bomb icons with the stack count BELOW the icon.
+ * - Flat style
+ * - Black count text (as requested)
  *
- * props:
- * - effects: { poison?: number, bomb?: number }
- * - size: icon size in px (default 28)
- * - showZero: show icons even if 0 (default true)
- * - className: extra class on root container
- * - labelColor: CSS color for numbers under icons (default "#000")
+ * Props:
+ *  - poison: number (>=0)
+ *  - bomb: number (>=0)
+ *  - size: px for icon (default 28)
+ *  - gap: spacing between icons (default 10)
  */
 export default function StatusEffects({
-  effects = {},
+  poison = 0,
+  bomb = 0,
   size = 28,
-  showZero = true,
+  gap = 10,
   className = "",
-  labelColor = "#000",
+  style = {},
 }) {
-  const poison = Number(effects.poison || 0);
-  const bomb   = Number(effects.bomb || 0);
+  const showPoison = Number(poison) > 0;
+  const showBomb = Number(bomb) > 0;
 
-  const items = [
-    { key: "poison", icon: PoisonIcon, count: poison, alt: "Poison" },
-    { key: "bomb",   icon: BombIcon,   count: bomb,   alt: "Bomb" },
-  ];
+  if (!showPoison && !showBomb) {
+    return null;
+  }
 
   return (
-    <div className={`status-stacks ${className}`}>
-      {items.map(({ key, icon, count, alt }) => {
-        if (!showZero && count <= 0) return null;
-        return (
-          <div className="stack" key={key}>
-            <img
-              src={icon}
-              alt={alt}
-              className="stack-icon"
-              style={{ width: size, height: size }}
-              draggable={false}
-            />
-            <div className="stack-count" style={{ color: labelColor }}>
-              {count}
-            </div>
-          </div>
-        );
-      })}
+    <div
+      className={`status-effects ${className}`}
+      style={{ display: "flex", alignItems: "flex-start", gap, ...style }}
+    >
+      {showPoison && (
+        <div className="status-item">
+          <StatusIcon src={PoisonIcon} size={size} title="Poison" />
+          <div className="status-count status-poison">{poison}</div>
+        </div>
+      )}
+      {showBomb && (
+        <div className="status-item">
+          <StatusIcon src={BombIcon} size={size} title="Bomb" />
+          <div className="status-count status-bomb">{bomb}</div>
+        </div>
+      )}
     </div>
   );
 }

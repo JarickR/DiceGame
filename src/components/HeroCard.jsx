@@ -1,250 +1,150 @@
-// src/components/HeroCard.jsx
 import React from "react";
-
-// Your existing icon components & status chips
-// (paths match the structure you shared)
 import ClassIcon from "../ui/ClassIcon.jsx";
 import SpellIcon from "../ui/SpellIcon.jsx";
-import StatusEffects from "./StatusEffects.jsx"; // uses your Bomb/Poison icons
+import StatusEffects from "./StatusEffects.jsx";
 
-// Optional: if you want tooltips/descriptions, we’ll try to read from SPELLS
-// but everything is defensive so it works even if SPELLS isn’t present.
-let SPELLS = null;
-try {
-  // eslint-disable-next-line import/no-unresolved
-  // adjust if your file name differs
-  // Example: export const SPELLS = { attack: {...}, heal: {...}, ... }
-  ({ SPELLS } = await import("../spells.js"));
-} catch {
-  // no-op; tooltips will just be the spell key
+const titleCase = (s = "") => s.slice(0, 1).toUpperCase() + s.slice(1);
+
+function FaceIcon({ face, heroClass }) {
+  if (!face) return null;
+  if (face.kind === "class") return <ClassIcon name={heroClass || "thief"} size={36} />;
+  if (face.kind === "upgrade") return <SpellIcon upgrade size={40} />;
+  if (face.kind === "spell") {
+    const s = face.spell || "blank";
+    if (s === "blank") return <div style={{ fontSize: 11, opacity: 0.65 }}>Blank</div>;
+    const tier = face.tier || 0; // not used; SpellIcon derives by name in your setup
+    return <SpellIcon name={s} tier={undefined} size={44} />;
+  }
+  return null;
 }
 
-// Small presentational helpers
-const Row = ({ style, children }) => (
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      ...style,
-    }}
-  >
-    {children}
-  </div>
-);
-
-const SectionTitle = ({ children }) => (
-  <div
-    style={{
-      fontSize: 12,
-      letterSpacing: 0.5,
-      opacity: 0.7,
-      margin: "2px 0 6px",
-    }}
-  >
-    {children}
-  </div>
-);
-
-/**
- * Props:
- * - hero: {
- *     id, name, classKey (or classId), hp, maxHp, armor,
- *     status?: { poison?: number, bomb?: number },
- *     tier1?: Array<{ key: string }|string>,
- *     tier2?: Array<{ key: string }|string>,
- *     upgrades?: Array<{ key: string }|string>,
- *   }
- * - onSpellClick?: (payload: { tier: 1|2|3, index: number, key: string, heroId: number|string }) => void
- * - highlight?: { tier: 1|2|3, index: number }   // e.g. the face that just rolled
- * - compact?: boolean                             // slightly smaller layout if true
- */
-export default function HeroCard({
-  hero,
-  onSpellClick,
-  highlight = null,
-  compact = false,
-}) {
-  if (!hero) return null;
-
-  const {
-    id: heroId,
-    name = "Hero",
-    classKey = hero.classId || "thief",
-    hp = 10,
-    maxHp = 10,
-    armor = 0,
-    status = {},
-    tier1 = [],
-    tier2 = [],
-    upgrades = [],
-  } = hero;
-
-  // Normalize spell entries to {key}
-  const norm = (arr) =>
-    (arr || []).map((s) =>
-      typeof s === "string" ? { key: s } : { key: s?.key || "attack" }
-    );
-
-  const t1 = norm(tier1);
-  const t2 = norm(tier2);
-  const ups = norm(upgrades);
-
-  const poison = Math.max(0, Number(status.poison || 0));
-  const bomb = Math.max(0, Number(status.bomb || 0));
-
-  const cardPad = compact ? 10 : 12;
-  const iconSize = compact ? 28 : 32;
-  const spellSize = compact ? 60 : 70;
-
-  const goldGlow = "0 0 0 2px #f2c744, 0 0 14px 0 rgba(242,199,68,.65)";
-
-  const renderSpell = (tier, entry, index) => {
-    const key = entry?.key || "attack";
-
-    // highlight if this tile is the “rolled result” (or active)
-    const isHot =
-      highlight &&
-      Number(highlight.tier) === Number(tier) &&
-      Number(highlight.index) === Number(index);
-
-    const tooltip =
-      (SPELLS && SPELLS[key] && (SPELLS[key].name || SPELLS[key].desc)) ||
-      key;
-
-    return (
-      <button
-        key={`${tier}-${index}-${key}`}
-        onClick={() =>
-          onSpellClick &&
-          onSpellClick({ tier, index, key, heroId })
-        }
-        title={String(tooltip)}
-        style={{
-          all: "unset",
-          cursor: "pointer",
-          borderRadius: 10,
-          boxShadow: isHot ? goldGlow : "0 0 0 1px rgba(255,255,255,.08)",
-          transition: "box-shadow .12s ease",
-          background:
-            tier === 1
-              ? "#0d5e37" // green tier 1
-              : tier === 2
-              ? "#0d4275" // blue tier 2
-              : "#5a1a74", // purple tier 3 (upgrades bucket)
-          padding: 6,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: spellSize,
-          height: Math.round(spellSize * 0.75), // maintain 500×375 vibe
-        }}
-      >
-        <SpellIcon tier={tier} name={key} size={spellSize} radius={8} />
-      </button>
-    );
-  };
+export default function HeroCard({ hero, isActive, goldSlot, flash }) {
+  const pct = (hero.hp / 20) * 100;
+  const faces = [
+    { kind: "spell", slot: 0, spell: hero.slots[0] },
+    { kind: "spell", slot: 1, spell: hero.slots[1] },
+    { kind: "spell", slot: 2, spell: hero.slots[2] },
+    { kind: "spell", slot: 3, spell: hero.slots[3] },
+    { kind: "class" },
+    { kind: "upgrade" },
+  ];
 
   return (
     <div
       style={{
-        background: "#12161e",
-        border: "1px solid #243043",
+        border: `2px solid ${isActive ? "#ffd966" : "rgba(255,255,255,.15)"}`,
         borderRadius: 14,
-        padding: cardPad,
-        color: "#e6edf6",
-        minWidth: compact ? 260 : 300,
-        boxShadow: "0 10px 30px rgba(0,0,0,.24)",
+        padding: 10,
+        minHeight: 180,
+        display: "grid",
+        gap: 8,
+        gridTemplateRows: "auto auto auto 1fr",
+        background: "rgba(255,255,255,.03)",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
-      {/* Header */}
-      <Row style={{ justifyContent: "space-between" }}>
-        <Row style={{ gap: 10 }}>
+      {/* header */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ width: 52, height: 52 }}>
+          <ClassIcon name={hero.class} size={52} />
+        </div>
+        <div style={{ fontWeight: 800, fontSize: 18 }}>
+          {titleCase(hero.class)} (P{hero.id + 1})
+        </div>
+      </div>
+
+      {/* HP */}
+      <div>
+        <div style={{ fontSize: 12, marginBottom: 4 }}>HP {hero.hp}/20</div>
+        <div style={{ height: 10, background: "rgba(255,255,255,.08)", borderRadius: 6 }}>
           <div
             style={{
-              width: iconSize + 8,
-              height: Math.round((iconSize + 8) * 0.75),
-              borderRadius: 8,
-              background: "rgba(255,255,255,.03)",
+              width: `${pct}%`,
+              height: "100%",
+              background: "#d84d4d",
+              borderRadius: 6,
+              transition: "width .25s ease",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Armor + Stacks */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ fontSize: 13 }}>Armor: <b>{hero.armor || 0}</b></div>
+        <div style={{ marginLeft: "auto" }}>
+          <StatusEffects poison={hero.stacks?.poison || 0} bomb={hero.stacks?.bomb || 0} />
+        </div>
+      </div>
+
+      {/* 6 faces */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, 1fr)",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
+        {faces.map((f, i) => (
+          <div
+            key={i}
+            style={{
+              height: 64,
+              borderRadius: 12,
+              border:
+                f.kind === "spell" && goldSlot === `p-${hero.id}-s${f.slot}`
+                  ? "3px solid #ffd966"
+                  : "1px solid rgba(255,255,255,.1)",
+              background: "rgba(255,255,255,.04)",
               display: "grid",
               placeItems: "center",
             }}
+            title={f.kind === "spell" ? (f.spell || "Blank") : f.kind}
           >
-            <ClassIcon name={String(classKey)} size={iconSize} radius={6} />
+            <FaceIcon face={f} heroClass={hero.class} />
           </div>
-          <div>
-            <div style={{ fontWeight: 700 }}>{name}</div>
-            <div
-              style={{
-                fontSize: 12,
-                opacity: 0.65,
-                textTransform: "capitalize",
-              }}
-            >
-              {String(classKey)}
-            </div>
-          </div>
-        </Row>
-
-        {/* HP / Armor quick stats */}
-        <Row style={{ gap: 12 }}>
-          <div
-            style={{
-              background: "#0b1119",
-              border: "1px solid #1d2838",
-              borderRadius: 8,
-              padding: "4px 8px",
-              fontSize: 13,
-            }}
-          >
-            HP <b>{hp}</b> / {maxHp}
-          </div>
-          <div
-            style={{
-              background: "#0b1119",
-              border: "1px solid #1d2838",
-              borderRadius: 8,
-              padding: "4px 8px",
-              fontSize: 13,
-            }}
-          >
-            Armor <b>{armor}</b>
-          </div>
-        </Row>
-      </Row>
-
-      {/* Stacks (PSN / BMB) */}
-      <div style={{ marginTop: 10, marginBottom: 6 }}>
-        <StatusEffects poison={poison} bomb={bomb} />
+        ))}
       </div>
 
-      {/* Tier 1 */}
-      <SectionTitle>Tier 1</SectionTitle>
-      <Row style={{ flexWrap: "wrap", gap: 8 }}>
-        {t1.length === 0 && (
-          <div style={{ opacity: 0.6, fontSize: 13 }}>— none —</div>
-        )}
-        {t1.map((s, i) => renderSpell(1, s, i))}
-      </Row>
-
-      {/* Tier 2 */}
-      <SectionTitle style={{ marginTop: 10 }}>Tier 2</SectionTitle>
-      <Row style={{ flexWrap: "wrap", gap: 8 }}>
-        {t2.length === 0 && (
-          <div style={{ opacity: 0.6, fontSize: 13 }}>— none —</div>
-        )}
-        {t2.map((s, i) => renderSpell(2, s, i))}
-      </Row>
-
-      {/* Upgrades (treated as tier 3 visuals) */}
-      {ups.length > 0 && (
-        <>
-          <SectionTitle style={{ marginTop: 10 }}>Upgrades</SectionTitle>
-          <Row style={{ flexWrap: "wrap", gap: 8 }}>
-            {ups.map((s, i) => renderSpell(3, s, i))}
-          </Row>
-        </>
+      {/* red flash when hit */}
+      {flash && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(220,40,40,.25)",
+            animation: "hitflash .35s ease",
+            pointerEvents: "none",
+          }}
+        />
       )}
+
+      {hero.defeated && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(0,0,0,.55)",
+            borderRadius: 14,
+            display: "grid",
+            placeItems: "center",
+            fontWeight: 900,
+            letterSpacing: 1,
+          }}
+        >
+          DOWN
+        </div>
+      )}
+
+      <style>{`
+        @keyframes hitflash {
+          0% { opacity: .0 }
+          20% { opacity: 1 }
+          100% { opacity: 0 }
+        }
+      `}</style>
     </div>
   );
 }
