@@ -1,255 +1,168 @@
 import React, { useMemo, useState } from "react";
-import ClassIcon from "./ClassIcon";
-import SpellIcon from "./SpellIcon";
-import { TIER1_POOL, TIER2_POOL } from "../spells";
+import ClassIcon from "../ui/ClassIcon";
+import SpellIcon from "../ui/SpellIcon";
 
-/**
- * Props:
- * - partySize: number
- * - t1Max: 2 | 3
- * - t2Max: 1 | 2
- * - onFinalize(loadouts): (loadoutsPerPlayer) => void
- * - classList: string[]
- */
+// your pools must line up with the sprite names in SpellIcon
+const T1_POOL = ["attack", "heal", "armor", "sweep", "fireball"];
+const T2_POOL = ["attack", "heal", "armor", "concentration", "sweep", "fireball", "poison", "bomb"];
+const CLASSES = ["thief","judge","tank","vampire","king","lich","paladin","barbarian"];
+
+function pickNFrom(array, n) {
+  const pool = [...array];
+  const out = [];
+  while (out.length < n && pool.length) {
+    const i = (Math.random() * pool.length) | 0;
+    out.push(pool.splice(i, 1)[0]);
+  }
+  return out;
+}
+
 export default function LoadoutScreen({
-  partySize,
-  t1Max,
-  t2Max,
-  onFinalize,
-  classList,
+  partySize = 1,
+  onDone
 }) {
-  // Selected class per player
-  const [classes, setClasses] = useState(
-    Array.from({ length: partySize }, () => classList[0] || "thief")
-  );
+  const [classes, setClasses] = useState(Array.from({ length: partySize }, () => "thief"));
 
-  // Randomized choices per player (3 from T1, 2 from T2)
-  const randomChoices = useMemo(() => {
-    return Array.from({ length: partySize }, () => ({
-      t1: sampleUniqueByName(TIER1_POOL, 3),
-      t2: sampleUniqueByName(TIER2_POOL, 2),
-    }));
-  }, [partySize]);
+  // random 3 tier1 / 2 tier2 options for each player
+  const [t1Options] = useState(() => Array.from({ length: partySize }, () => pickNFrom(T1_POOL, 3)));
+  const [t2Options] = useState(() => Array.from({ length: partySize }, () => pickNFrom(T2_POOL, 2)));
 
-  // Player selections (what they’ve picked so far)
-  const [selections, setSelections] = useState(
-    Array.from({ length: partySize }, () => ({ t1: [], t2: [] }))
-  );
+  // selections per player
+  const [t1Selected, setT1Selected] = useState(() => Array.from({ length: partySize }, () => []));
+  const [t2Selected, setT2Selected] = useState(() => Array.from({ length: partySize }, () => []));
 
-  const togglePick = (playerIdx, tier, spell) => {
-    setSelections((prev) => {
-      const next = prev.map((p) => ({ t1: [...p.t1], t2: [...p.t2] }));
-      const bag = next[playerIdx][tier];
-      const max = tier === "t1" ? t1Max : t2Max;
-      const exists = bag.find((s) => s.name === spell.name);
+  const canFinish = useMemo(() => true, []);
 
-      if (exists) {
-        // Deselect
-        next[playerIdx][tier] = bag.filter((s) => s.name !== spell.name);
-      } else {
-        if (bag.length >= max) {
-          // Replace oldest (acts like a capped radio-group)
-          bag.shift();
-        }
-        bag.push(spell);
-      }
-      return next;
+  function toggleT1(pIdx, name) {
+    setT1Selected((S) => {
+      const n = S.map((row) => [...row]);
+      const row = n[pIdx];
+      const i = row.indexOf(name);
+      if (i >= 0) row.splice(i, 1);
+      else if (row.length < 2) row.push(name);
+      return n;
     });
-  };
+  }
 
-  const finalize = () => {
-    // Build 4 slots per player: [T1, T1, T2, (T1/T2 optional based on caps)]
-    const loadouts = classes.map((cls, idx) => {
-      const chosenT1 = selections[idx].t1.slice(0, t1Max);
-      const chosenT2 = selections[idx].t2.slice(0, t2Max);
+  function toggleT2(pIdx, name) {
+    setT2Selected((S) => {
+      const n = S.map((row) => [...row]);
+      const row = n[pIdx];
+      const i = row.indexOf(name);
+      if (i >= 0) row.splice(i, 1);
+      else if (row.length < 1) row.push(name);
+      return n;
+    });
+  }
 
-      const slots = [null, null, null, null];
+  function finalize() {
+    // Build player objects. Fill to 4 spell slots. Unpicked become blanks.
+    const players = classes.map((cls, idx) => {
+      const s1 = t1Selected[idx];               // 0..2 picks
+      const s2 = t2Selected[idx];               // 0..1 pick
 
-      // Up to 2 Tier1 go into slots 0 and 1
-      for (let i = 0; i < Math.min(2, chosenT1.length); i++) {
-        slots[i] = { tier: 1, name: chosenT1[i].name };
-      }
-      // One Tier2 goes into slot 2 (if chosen)
-      if (chosenT2[0]) slots[2] = { tier: 2, name: chosenT2[0].name };
+      const slotNames = [
+        ...(s1[0] ? [{ tier: 1, name: s1[0] }] : [null]),
+        ...(s1[1] ? [{ tier: 1, name: s1[1] }] : [null]),
+        ...(s2[0] ? [{ tier: 2, name: s2[0] }] : [null]),
+        null, // 4th slot always blank to start (fits your rules: 4 total slots)
+      ].slice(0,4);
 
-      // Fourth slot rules:
-      // - If t1Max === 3 and we took 3 T1 and did not take T2, drop T1 #3 here
-      if (t1Max === 3 && chosenT1.length === 3 && !chosenT2.length) {
-        slots[3] = { tier: 1, name: chosenT1[2].name };
-      }
-      // - If t2Max === 2 and we took 2 T2, place the second T2 here
-      if (t2Max === 2 && chosenT2.length === 2) {
-        slots[3] = { tier: 2, name: chosenT2[1].name };
-      }
-
-      return { className: cls, spells: slots };
+      return {
+        id: idx,
+        className: cls,
+        hp: 20, maxHp: 20,
+        armor: 0,
+        stacks: { poison: 0, bomb: 0 },
+        spells: slotNames
+      };
     });
 
-    onFinalize(loadouts);
-  };
+    if (onDone) onDone(players);
+  }
 
   return (
-    <div className="loadout-wrap" style={{ color: "white" }}>
-      {Array.from({ length: partySize }).map((_, i) => {
-        const t1opts = randomChoices[i].t1;
-        const t2opts = randomChoices[i].t2;
-        const sel = selections[i];
+    <div style={{ color: "#fff", padding: 16 }}>
+      <h1>Choose Classes & Loadouts</h1>
 
-        return (
-          <div key={i} className="panel" style={{ marginBottom: 24 }}>
-            {/* Header: player + current class */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 10,
-              }}
-            >
-              <ClassIcon name={classes[i]} size={48} radius={10} />
-              <div style={{ fontWeight: 800 }}>{`Player ${i + 1}`}</div>
-            </div>
-
-            {/* Class selector row */}
-            <div
-              className="class-row"
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-                marginBottom: 14,
-              }}
-            >
-              {classList.map((name) => {
-                const active = classes[i] === name;
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    className={`choice-card ${active ? "selected" : ""}`}
-                    onClick={() =>
-                      setClasses((prev) => {
-                        const next = [...prev];
-                        next[i] = name;
-                        return next;
-                      })
-                    }
-                  >
-                    <ClassIcon name={name} size={64} radius={12} />
-                    <div className="choice-title">{name}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Tier 1 choices */}
-            <div
-              style={{ fontWeight: 800, marginBottom: 6 }}
-            >{`Tier 1 — pick ${t1Max === 3 ? "2 or 3" : "up to 2"}`}{" "}
-              <span style={{ color: "var(--muted)" }}>
-                (picked {sel.t1.length})
-              </span>
-            </div>
-            <div
-              className="choice-row"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(160px, 1fr))",
-                gap: 14,
-                marginBottom: 14,
-              }}
-            >
-              {t1opts.map((spell) => {
-                const selected = !!sel.t1.find((s) => s.name === spell.name);
-                return (
-                  <button
-                    key={spell.name}
-                    type="button"
-                    className={`choice-card ${selected ? "selected" : ""}`}
-                    onClick={() => togglePick(i, "t1", spell)}
-                  >
-                    <SpellIcon tier={1} name={spell.name} size={72} radius={12} />
-                    <div className="choice-title">{spell.name}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Tier 2 choices */}
-            <div
-              style={{ fontWeight: 800, marginBottom: 6 }}
-            >{`Tier 2 — pick ${t2Max === 2 ? "1 or 2" : "1"}`}{" "}
-              <span style={{ color: "var(--muted)" }}>
-                (picked {sel.t2.length})
-              </span>
-            </div>
-            <div
-              className="choice-row"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(160px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {t2opts.map((spell) => {
-                const selected = !!sel.t2.find((s) => s.name === spell.name);
-                return (
-                  <button
-                    key={spell.name}
-                    type="button"
-                    className={`choice-card ${selected ? "selected" : ""}`}
-                    onClick={() => togglePick(i, "t2", spell)}
-                  >
-                    <SpellIcon tier={2} name={spell.name} size={72} radius={12} />
-                    <div className="choice-title">{spell.name}</div>
-                  </button>
-                );
-              })}
-            </div>
+      {classes.map((cls, pIdx) => (
+        <div key={pIdx} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 12, marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <ClassIcon name={cls} size={40} />
+            <strong>Player {pIdx + 1}</strong>
           </div>
-        );
-      })}
 
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button type="button" onClick={finalize} style={{ fontWeight: 800 }}>
-          Finalize & Continue
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            {CLASSES.map((c) => (
+              <button
+                key={c}
+                onClick={() => setClasses((C) => C.map((x, i) => (i === pIdx ? c : x)))}
+                style={{
+                  width: 88, height: 88, borderRadius: 12,
+                  border: c === cls ? "2px solid #d4a11d" : "1px solid rgba(255,255,255,0.18)",
+                  background: "transparent", display: "grid", placeItems: "center", cursor: "pointer"
+                }}
+              >
+                <ClassIcon name={c} size={44} />
+              </button>
+            ))}
+          </div>
+
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Tier 1 — pick up to 2 (shown 3)</div>
+          <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+            {t1Options[pIdx].map((name) => {
+              const active = t1Selected[pIdx].includes(name);
+              return (
+                <button
+                  key={name}
+                  onClick={() => toggleT1(pIdx, name)}
+                  style={{
+                    width: 120, height: 120, borderRadius: 14,
+                    background: active ? "rgba(212,161,29,0.12)" : "rgba(255,255,255,0.06)",
+                    border: active ? "2px solid #d4a11d" : "1px solid rgba(255,255,255,0.12)",
+                    display:"grid", placeItems:"center", cursor:"pointer"
+                  }}
+                >
+                  <SpellIcon tier={1} name={name} size={72} />
+                  <div style={{ marginTop: 6 }}>{name}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Tier 2 — pick 1 (shown 2)</div>
+          <div style={{ display: "flex", gap: 12 }}>
+            {t2Options[pIdx].map((name) => {
+              const active = t2Selected[pIdx].includes(name);
+              return (
+                <button
+                  key={name}
+                  onClick={() => toggleT2(pIdx, name)}
+                  style={{
+                    width: 120, height: 120, borderRadius: 14,
+                    background: active ? "rgba(212,161,29,0.12)" : "rgba(255,255,255,0.06)",
+                    border: active ? "2px solid #d4a11d" : "1px solid rgba(255,255,255,0.12)",
+                    display:"grid", placeItems:"center", cursor:"pointer"
+                  }}
+                >
+                  <SpellIcon tier={2} name={name} size={72} />
+                  <div style={{ marginTop: 6 }}>{name}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ display:"flex", justifyContent:"flex-end" }}>
+        <button
+          onClick={finalize}
+          style={{ padding:"10px 16px", borderRadius:10, border:"1px solid rgba(255,255,255,0.18)", background:"#1f6feb", color:"#fff", fontWeight:800 }}
+          disabled={!canFinish}
+        >
+          Finalize & Start
         </button>
       </div>
     </div>
   );
-}
-
-/* ------------------------------------------------------- */
-/* Helpers */
-/* ------------------------------------------------------- */
-
-function normalizeSpell(v) {
-  // Accept "attack" OR { name: "attack" }
-  return typeof v === "string" ? { name: v } : { name: v.name };
-}
-
-function sampleUniqueByName(pool, n) {
-  // Normalize and shuffle, then keep by name uniqueness
-  const normalized = pool.map(normalizeSpell);
-  const arr = shuffle([...normalized]);
-
-  const seen = new Set();
-  const result = [];
-  for (const item of arr) {
-    if (!seen.has(item.name)) {
-      seen.add(item.name);
-      result.push(item);
-      if (result.length === n) break;
-    }
-  }
-  // If pool was small, result might be < n — that’s OK
-  return result;
-}
-
-function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
 }
