@@ -1,150 +1,134 @@
-import React from "react";
-import ClassIcon from "../ui/ClassIcon.jsx";
-import SpellIcon from "../ui/SpellIcon.jsx";
-import StatusEffects from "./StatusEffects.jsx";
+// src/components/HeroCard.jsx
+import React, { useMemo } from "react";
+import ClassIcon from "../ui/ClassIcon";
+import SpellIcon from "../ui/SpellIcon";
 
-const titleCase = (s = "") => s.slice(0, 1).toUpperCase() + s.slice(1);
+export default function HeroCard({
+  hero = {},
+  isActive = false,
+  onRoll = () => {},
+}) {
+  // Defensive normalization
+  const id = Number.isFinite(hero.id) ? hero.id : 0;
+  const className = hero.className || "thief";
+  const maxHp = Number.isFinite(hero.maxHp) ? hero.maxHp : 20;
+  const hp = Math.min(Math.max(Number(hero.hp ?? maxHp), 0), maxHp);
+  const armor = Number(hero.armor ?? 0);
+  const stacks = {
+    poison: Number(hero?.stacks?.poison ?? 0),
+    bomb: Number(hero?.stacks?.bomb ?? 0),
+  };
 
-function FaceIcon({ face, heroClass }) {
-  if (!face) return null;
-  if (face.kind === "class") return <ClassIcon name={heroClass || "thief"} size={36} />;
-  if (face.kind === "upgrade") return <SpellIcon upgrade size={40} />;
-  if (face.kind === "spell") {
-    const s = face.spell || "blank";
-    if (s === "blank") return <div style={{ fontSize: 11, opacity: 0.65 }}>Blank</div>;
-    const tier = face.tier || 0; // not used; SpellIcon derives by name in your setup
-    return <SpellIcon name={s} tier={undefined} size={44} />;
-  }
-  return null;
-}
+  const spells = useMemo(() => {
+    const raw = Array.isArray(hero.spells) ? hero.spells.slice(0, 4) : [];
+    while (raw.length < 4) raw.push(null);
+    return raw.map((s) =>
+      s && s.name ? { tier: Number(s.tier ?? 1), name: String(s.name) } : null
+    );
+  }, [hero.spells]);
 
-export default function HeroCard({ hero, isActive, goldSlot, flash }) {
-  const pct = (hero.hp / 20) * 100;
-  const faces = [
-    { kind: "spell", slot: 0, spell: hero.slots[0] },
-    { kind: "spell", slot: 1, spell: hero.slots[1] },
-    { kind: "spell", slot: 2, spell: hero.slots[2] },
-    { kind: "spell", slot: 3, spell: hero.slots[3] },
-    { kind: "class" },
-    { kind: "upgrade" },
-  ];
+  const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
 
   return (
     <div
       style={{
-        border: `2px solid ${isActive ? "#ffd966" : "rgba(255,255,255,.15)"}`,
-        borderRadius: 14,
-        padding: 10,
-        minHeight: 180,
-        display: "grid",
-        gap: 8,
-        gridTemplateRows: "auto auto auto 1fr",
-        background: "rgba(255,255,255,.03)",
-        position: "relative",
-        overflow: "hidden",
+        width: 360,
+        border: "1px solid #333",
+        borderRadius: 12,
+        padding: 12,
+        outline: isActive ? "2px solid #d4a11d" : "none",
+        background: "#12161a",
+        color: "#fff",
+        transition: "outline-color 120ms linear",
       }}
     >
-      {/* header */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <div style={{ width: 52, height: 52 }}>
-          <ClassIcon name={hero.class} size={52} />
-        </div>
-        <div style={{ fontWeight: 800, fontSize: 18 }}>
-          {titleCase(hero.class)} (P{hero.id + 1})
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <ClassIcon name={className} size={44} />
+        <div style={{ fontWeight: 900, fontSize: 20, textTransform: "capitalize" }}>
+          {className} <span style={{ opacity: 0.8 }}>(P{id + 1})</span>
         </div>
       </div>
 
       {/* HP */}
-      <div>
-        <div style={{ fontSize: 12, marginBottom: 4 }}>HP {hero.hp}/20</div>
-        <div style={{ height: 10, background: "rgba(255,255,255,.08)", borderRadius: 6 }}>
-          <div
-            style={{
-              width: `${pct}%`,
-              height: "100%",
-              background: "#d84d4d",
-              borderRadius: 6,
-              transition: "width .25s ease",
-            }}
-          />
-        </div>
+      <div style={{ marginBottom: 6 }}>
+        HP {hp}/{maxHp}
       </div>
-
-      {/* Armor + Stacks */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ fontSize: 13 }}>Armor: <b>{hero.armor || 0}</b></div>
-        <div style={{ marginLeft: "auto" }}>
-          <StatusEffects poison={hero.stacks?.poison || 0} bomb={hero.stacks?.bomb || 0} />
-        </div>
-      </div>
-
-      {/* 6 faces */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(6, 1fr)",
-          gap: 8,
-          alignItems: "center",
+          height: 8,
+          background: "#30161a",
+          borderRadius: 999,
+          overflow: "hidden",
+          marginBottom: 10,
         }}
       >
-        {faces.map((f, i) => (
+        <div
+          style={{
+            width: `${hpPct}%`,
+            height: "100%",
+            background: "#ea4d5a",
+            transition: "width 180ms linear",
+          }}
+        />
+      </div>
+
+      {/* Armor + stacks */}
+      <div style={{ marginBottom: 8 }}>Armor {armor}</div>
+      <div style={{ marginBottom: 10, display: "flex", gap: 12, fontSize: 12 }}>
+        <div>PSN {stacks.poison}</div>
+        <div>BMB {stacks.bomb}</div>
+      </div>
+
+      {/* Spell slots */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        {spells.map((slot, idx) => (
           <div
-            key={i}
+            key={idx}
+            title={slot?.name ? `${slot.name} (T${slot.tier})` : "Blank"}
             style={{
-              height: 64,
+              width: 70,
+              height: 70,
               borderRadius: 12,
-              border:
-                f.kind === "spell" && goldSlot === `p-${hero.id}-s${f.slot}`
-                  ? "3px solid #ffd966"
-                  : "1px solid rgba(255,255,255,.1)",
-              background: "rgba(255,255,255,.04)",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.12)",
               display: "grid",
               placeItems: "center",
             }}
-            title={f.kind === "spell" ? (f.spell || "Blank") : f.kind}
           >
-            <FaceIcon face={f} heroClass={hero.class} />
+            {slot?.name ? (
+              <SpellIcon tier={slot.tier} name={slot.name} size={56} />
+            ) : (
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 10,
+                  border: "1px dashed rgba(255,255,255,0.3)",
+                }}
+              />
+            )}
           </div>
         ))}
       </div>
 
-      {/* red flash when hit */}
-      {flash && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "rgba(220,40,40,.25)",
-            animation: "hitflash .35s ease",
-            pointerEvents: "none",
-          }}
-        />
-      )}
-
-      {hero.defeated && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "rgba(0,0,0,.55)",
-            borderRadius: 14,
-            display: "grid",
-            placeItems: "center",
-            fontWeight: 900,
-            letterSpacing: 1,
-          }}
-        >
-          DOWN
-        </div>
-      )}
-
-      <style>{`
-        @keyframes hitflash {
-          0% { opacity: .0 }
-          20% { opacity: 1 }
-          100% { opacity: 0 }
-        }
-      `}</style>
+      {/* Roll button — ALWAYS clickable (we guard in App.jsx) */}
+      <button
+        onClick={onRoll}
+        title={isActive ? "Roll your die" : "Not your turn"}
+        style={{
+          padding: "8px 14px",
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.2)",
+          background: isActive ? "#1f6feb" : "rgba(255,255,255,0.12)",
+          color: "#fff",
+          fontWeight: 800,
+          cursor: "pointer",
+          opacity: hp <= 0 ? 0.5 : 1,
+        }}
+      >
+        Roll
+      </button>
     </div>
   );
 }

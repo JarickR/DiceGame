@@ -1,0 +1,18 @@
+/* src/ui/HitFlash.css */
+.hitFlash {
+  position: relative;
+}
+.hitFlash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 64, 64, 0.28);
+  border-radius: inherit;
+  animation: hf 320ms ease;
+  pointer-events: none;
+}
+@keyframes hf {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  100% { opacity: 0; }
+}
